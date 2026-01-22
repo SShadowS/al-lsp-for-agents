@@ -616,6 +616,63 @@ func (h *CallHierarchyHandler) Handle(msg *Message, w WrapperInterface) (*Messag
 	}, nil
 }
 
+// CodeLensHandler handles textDocument/codeLens via al-call-hierarchy server
+type CodeLensHandler struct{}
+
+func (h *CodeLensHandler) ShouldHandle(method string) bool {
+	return method == "textDocument/codeLens"
+}
+
+func (h *CodeLensHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	// Get call hierarchy server from wrapper
+	chServer := w.GetCallHierarchyServer()
+	if chServer == nil || !chServer.IsInitialized() {
+		w.Log("Call hierarchy server not available for codeLens, returning empty result")
+		// Return empty array instead of error - codeLens is optional
+		return &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  []byte("[]"),
+		}, nil
+	}
+
+	w.Log("Routing textDocument/codeLens to al-call-hierarchy")
+
+	// Parse params
+	var params interface{}
+	if len(msg.Params) > 0 {
+		json.Unmarshal(msg.Params, &params)
+	}
+
+	// Forward to al-call-hierarchy
+	response, err := chServer.Request(msg.Method, params)
+	if err != nil {
+		w.Log("CodeLens request failed: %v", err)
+		// Return empty array on error - codeLens is optional
+		return &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  []byte("[]"),
+		}, nil
+	}
+
+	if response.Error != nil {
+		w.Log("CodeLens response error: %v", response.Error)
+		// Return empty array on error - codeLens is optional
+		return &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  []byte("[]"),
+		}, nil
+	}
+
+	return &Message{
+		JSONRPC: "2.0",
+		ID:      msg.ID,
+		Result:  response.Result,
+	}, nil
+}
+
 // GetDefaultHandlers returns the default set of handlers
 func GetDefaultHandlers() []Handler {
 	return []Handler{
@@ -625,5 +682,6 @@ func GetDefaultHandlers() []Handler {
 		&WorkspaceSymbolHandler{},
 		&ReferencesHandler{},
 		NewCallHierarchyHandler(),
+		&CodeLensHandler{},
 	}
 }

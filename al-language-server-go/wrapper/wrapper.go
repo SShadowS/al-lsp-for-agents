@@ -321,6 +321,15 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 			json.Unmarshal(msg.Params, &params)
 		}
 		w.SendNotificationToLSP(msg.Method, params)
+
+		// Also forward document events to call hierarchy server
+		if w.callHierarchyServer != nil && w.callHierarchyServer.IsInitialized() {
+			switch msg.Method {
+			case "textDocument/didOpen", "textDocument/didClose", "textDocument/didChange":
+				w.Log("Forwarding %s to al-call-hierarchy", msg.Method)
+				w.callHierarchyServer.SendNotification(msg.Method, params)
+			}
+		}
 	}
 
 	return nil, nil
@@ -384,12 +393,50 @@ func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
 	w.initialized = true
 	w.initMu.Unlock()
 
+	// Modify capabilities to advertise codeLensProvider (provided by al-call-hierarchy)
+	modifiedResult := w.addCodeLensCapability(response.Result)
+
 	// Return response to client
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
-		Result:  response.Result,
+		Result:  modifiedResult,
 	}, nil
+}
+
+// addCodeLensCapability adds codeLensProvider to server capabilities
+func (w *ALLSPWrapper) addCodeLensCapability(result json.RawMessage) json.RawMessage {
+	if result == nil {
+		return result
+	}
+
+	var initResult map[string]interface{}
+	if err := json.Unmarshal(result, &initResult); err != nil {
+		w.Log("Failed to parse initialize result for capability modification: %v", err)
+		return result
+	}
+
+	// Get or create capabilities
+	caps, ok := initResult["capabilities"].(map[string]interface{})
+	if !ok {
+		w.Log("No capabilities in initialize result")
+		return result
+	}
+
+	// Add codeLensProvider capability
+	caps["codeLensProvider"] = map[string]interface{}{
+		"resolveProvider": false,
+	}
+
+	w.Log("Added codeLensProvider capability to server capabilities")
+
+	modifiedResult, err := json.Marshal(initResult)
+	if err != nil {
+		w.Log("Failed to marshal modified capabilities: %v", err)
+		return result
+	}
+
+	return modifiedResult
 }
 
 // SendRequestToLSP sends a request to the AL LSP and waits for response
