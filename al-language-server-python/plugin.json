@@ -1,6 +1,6 @@
 {
   "name": "al-language-server-python",
-  "version": "1.3.11",
+  "version": "1.3.12",
   "description": "[DEPRECATED] Use al-language-server-go-* instead. This wrapper lacks Code Lens and Call Hierarchy support.",
   "author": {
     "name": "SShadowS"
