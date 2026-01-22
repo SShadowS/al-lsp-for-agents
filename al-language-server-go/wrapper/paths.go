@@ -127,13 +127,31 @@ func PathToFileURI(path string) string {
 	// Normalize path separators
 	path = filepath.ToSlash(path)
 
+	// Escape special characters but NOT forward slashes
+	// url.PathEscape escapes slashes which breaks file URIs
+	var escaped strings.Builder
+	for _, c := range path {
+		switch {
+		case c == '/':
+			escaped.WriteRune('/')
+		case c == ':':
+			escaped.WriteRune(':')
+		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'):
+			escaped.WriteRune(c)
+		case c == '-' || c == '_' || c == '.' || c == '~':
+			escaped.WriteRune(c)
+		default:
+			escaped.WriteString(url.PathEscape(string(c)))
+		}
+	}
+
 	// On Windows, we need file:///C:/path
 	if runtime.GOOS == "windows" && len(path) >= 2 && path[1] == ':' {
-		return "file:///" + url.PathEscape(path)
+		return "file:///" + escaped.String()
 	}
 
 	// On Unix, we need file:///path
-	return "file://" + url.PathEscape(path)
+	return "file://" + escaped.String()
 }
 
 // NormalizePath returns a normalized absolute path

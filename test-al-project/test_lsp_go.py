@@ -311,25 +311,32 @@ class LSPTester:
 
         return self.add_result("References", False, "Unexpected response format", response)
 
-    def test_unsupported_call_hierarchy(self) -> TestResult:
-        """Test that call hierarchy methods return proper errors."""
-        file_uri = Path(TEST_FILE).as_uri()
+    def test_call_hierarchy(self) -> TestResult:
+        """Test textDocument/prepareCallHierarchy on a procedure."""
+        # Test on TestNoSeries procedure in CustomerMgt.Codeunit.al (line 52)
+        codeunit_file = os.path.join(TEST_PROJECT, "src", "Codeunits", "CustomerMgt.Codeunit.al")
+        file_uri = Path(codeunit_file).as_uri()
 
         _, response = self.request("textDocument/prepareCallHierarchy", {
             "textDocument": {"uri": file_uri},
-            "position": {"line": 10, "character": 10}
+            "position": {"line": 52, "character": 14}  # On "TestNoSeries" procedure name
         })
 
         if not response:
-            return self.add_result("CallHierarchy (unsupported)", False, "No response (timeout)")
+            return self.add_result("CallHierarchy", False, "No response (timeout)")
 
         if "error" in response:
             error_code = response["error"].get("code", 0)
             if error_code == -32601:  # Method not found
-                return self.add_result("CallHierarchy (unsupported)", True, "Correctly returned MethodNotFound error", response)
-            return self.add_result("CallHierarchy (unsupported)", True, f"Returned error (code: {error_code})", response)
+                return self.add_result("CallHierarchy", False, "Method not supported (MethodNotFound)", response)
+            return self.add_result("CallHierarchy", False, f"Error (code: {error_code}): {response['error'].get('message', 'unknown')}", response)
 
-        return self.add_result("CallHierarchy (unsupported)", False, "Should have returned error", response)
+        if "result" in response and response["result"]:
+            items = response["result"]
+            if isinstance(items, list) and len(items) > 0:
+                return self.add_result("CallHierarchy", True, f"Found {len(items)} call hierarchy item(s)", response)
+
+        return self.add_result("CallHierarchy", False, "Empty or null result", response)
 
     def run_all_tests(self):
         """Run all tests."""
@@ -354,7 +361,7 @@ class LSPTester:
             self.test_workspace_symbol_empty_query()
             self.test_workspace_symbol_path_workaround()
             self.test_references()
-            self.test_unsupported_call_hierarchy()
+            self.test_call_hierarchy()
 
         finally:
             self.stop()

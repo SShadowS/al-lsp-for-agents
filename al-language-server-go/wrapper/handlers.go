@@ -101,6 +101,9 @@ type WrapperInterface interface {
 	// SendNotificationToLSP sends a notification to the AL LSP
 	SendNotificationToLSP(method string, params interface{}) error
 
+	// GetCallHierarchyServer returns the call hierarchy server (may be nil)
+	GetCallHierarchyServer() *CallHierarchyServer
+
 	// Log logs a message
 	Log(format string, args ...interface{})
 }
@@ -555,13 +558,13 @@ func (h *ReferencesHandler) Handle(msg *Message, w WrapperInterface) (*Message, 
 	}, nil
 }
 
-// UnsupportedMethodHandler handles methods that are not supported
-type UnsupportedMethodHandler struct {
+// CallHierarchyHandler handles call hierarchy methods via al-call-hierarchy server
+type CallHierarchyHandler struct {
 	methods map[string]bool
 }
 
-func NewUnsupportedMethodHandler() *UnsupportedMethodHandler {
-	return &UnsupportedMethodHandler{
+func NewCallHierarchyHandler() *CallHierarchyHandler {
+	return &CallHierarchyHandler{
 		methods: map[string]bool{
 			"textDocument/prepareCallHierarchy": true,
 			"callHierarchy/incomingCalls":       true,
@@ -570,14 +573,47 @@ func NewUnsupportedMethodHandler() *UnsupportedMethodHandler {
 	}
 }
 
-func (h *UnsupportedMethodHandler) ShouldHandle(method string) bool {
+func (h *CallHierarchyHandler) ShouldHandle(method string) bool {
 	return h.methods[method]
 }
 
-func (h *UnsupportedMethodHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
-	w.Log("Unsupported method: %s", msg.Method)
-	return nil, NewErrorResponse(msg.ID, MethodNotFound,
-		"Method not supported by AL Language Server: "+msg.Method)
+func (h *CallHierarchyHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	// Get call hierarchy server from wrapper
+	chServer := w.GetCallHierarchyServer()
+	if chServer == nil || !chServer.IsInitialized() {
+		w.Log("Call hierarchy server not available for: %s", msg.Method)
+		return nil, NewErrorResponse(msg.ID, MethodNotFound,
+			"Call hierarchy server not available")
+	}
+
+	w.Log("Routing %s to al-call-hierarchy", msg.Method)
+
+	// Parse params
+	var params interface{}
+	if len(msg.Params) > 0 {
+		json.Unmarshal(msg.Params, &params)
+	}
+
+	// Forward to al-call-hierarchy
+	response, err := chServer.Request(msg.Method, params)
+	if err != nil {
+		w.Log("Call hierarchy request failed: %v", err)
+		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+	}
+
+	if response.Error != nil {
+		return nil, &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Error:   response.Error,
+		}
+	}
+
+	return &Message{
+		JSONRPC: "2.0",
+		ID:      msg.ID,
+		Result:  response.Result,
+	}, nil
 }
 
 // GetDefaultHandlers returns the default set of handlers
@@ -588,6 +624,6 @@ func GetDefaultHandlers() []Handler {
 		&DocumentSymbolHandler{},
 		&WorkspaceSymbolHandler{},
 		&ReferencesHandler{},
-		NewUnsupportedMethodHandler(),
+		NewCallHierarchyHandler(),
 	}
 }
