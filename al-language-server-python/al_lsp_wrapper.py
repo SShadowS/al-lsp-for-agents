@@ -566,7 +566,14 @@ class ALLSPWrapper:
         """Handle incoming notification from AL LSP."""
         method = notification.get("method", "")
         log(f"Notification: {method}")
-        # Just log for now, can be extended to forward to client
+
+        # Forward diagnostics to Claude Code
+        if method == "textDocument/publishDiagnostics":
+            params = notification.get("params", {})
+            diagnostics = params.get("diagnostics", [])
+            uri = params.get("uri", "")
+            log(f"Forwarding {len(diagnostics)} diagnostics for {uri}")
+            write_client_message(notification)
 
     def _uri_to_path(self, uri: str) -> str:
         """Convert file URI to local path."""
