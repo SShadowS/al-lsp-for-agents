@@ -13,6 +13,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Claude Code temp files
+tmpclaude-*
+
 CLAUDE.md
 .claude/
 .alpackages/
