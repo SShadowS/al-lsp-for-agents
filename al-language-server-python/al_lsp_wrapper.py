@@ -698,6 +698,17 @@ class ALLSPWrapper:
 
     def initialize(self, params: dict) -> dict:
         """Handle initialize request with AL-specific setup."""
+        # Log raw initialize params from Claude Code to see client capabilities
+        log("=== CLIENT INITIALIZE PARAMS (raw) ===")
+        log(json.dumps(params, indent=2))
+        log("=== END CLIENT INITIALIZE PARAMS ===")
+
+        # Log just the capabilities for easier reading
+        if "capabilities" in params:
+            log("=== CLIENT CAPABILITIES (parsed) ===")
+            log(json.dumps(params["capabilities"], indent=2))
+            log("=== END CLIENT CAPABILITIES ===")
+
         workspace_root = params.get("rootPath") or params.get("rootUri", "").replace("file:///", "").replace("file://", "")
 
         # Save original workspace root for call hierarchy (may contain multiple AL projects)

@@ -41,6 +41,9 @@ type ALLSPWrapper struct {
 	// Handlers
 	handlers []Handler
 
+	// Call hierarchy server
+	callHierarchyServer *CallHierarchyServer
+
 	// Logging
 	logFile *os.File
 	logMu   sync.Mutex
@@ -253,6 +256,8 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 	// Handle initialized notification
 	if msg.Method == "initialized" {
 		w.SendNotificationToLSP("initialized", nil)
+		// Start call hierarchy server after AL LSP is initialized
+		go w.startCallHierarchyServer()
 		return nil, nil
 	}
 
@@ -271,6 +276,10 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 
 	// Handle exit
 	if msg.Method == "exit" {
+		// Shutdown call hierarchy server first
+		if w.callHierarchyServer != nil {
+			w.callHierarchyServer.Shutdown()
+		}
 		w.SendNotificationToLSP("exit", nil)
 		os.Exit(0)
 		return nil, nil
@@ -318,9 +327,21 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 }
 
 func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
+	// Log raw initialize params from Claude Code to see client capabilities
+	w.Log("=== CLIENT INITIALIZE PARAMS (raw) ===")
+	w.Log("%s", string(msg.Params))
+	w.Log("=== END CLIENT INITIALIZE PARAMS ===")
+
 	var params InitializeParams
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		w.Log("Failed to parse initialize params: %v", err)
+	}
+
+	// Log parsed capabilities for easier reading
+	if capsJSON, err := json.MarshalIndent(params.Capabilities, "", "  "); err == nil {
+		w.Log("=== CLIENT CAPABILITIES (parsed) ===")
+		w.Log("%s", string(capsJSON))
+		w.Log("=== END CLIENT CAPABILITIES ===")
 	}
 
 	// Extract workspace root
@@ -510,4 +531,49 @@ func (w *ALLSPWrapper) waitForProjectLoad() {
 	}
 
 	w.Log("Timeout waiting for project load, continuing anyway")
+}
+
+// GetCallHierarchyServer returns the call hierarchy server
+func (w *ALLSPWrapper) GetCallHierarchyServer() *CallHierarchyServer {
+	return w.callHierarchyServer
+}
+
+// startCallHierarchyServer starts the al-call-hierarchy server
+func (w *ALLSPWrapper) startCallHierarchyServer() {
+	w.callHierarchyServer = NewCallHierarchyServer(w.Log)
+
+	executable := w.callHierarchyServer.FindExecutable()
+	if executable == "" {
+		w.Log("al-call-hierarchy executable not found, call hierarchy disabled")
+		w.callHierarchyServer = nil
+		return
+	}
+
+	if err := w.callHierarchyServer.Start(executable); err != nil {
+		w.Log("Failed to start al-call-hierarchy: %v", err)
+		w.callHierarchyServer = nil
+		return
+	}
+
+	// Initialize with workspace root
+	workspacePath := w.workspaceRoot
+	if workspacePath == "" {
+		workspacePath, _ = os.Getwd()
+	}
+
+	workspaceURI := PathToFileURI(workspacePath)
+	workspaceName := filepath.Base(workspacePath)
+	workspaceFolders := []WorkspaceFolder{
+		{URI: workspaceURI, Name: workspaceName},
+	}
+
+	w.Log("Initializing call hierarchy with workspace: %s", workspacePath)
+	if err := w.callHierarchyServer.Initialize(workspaceURI, workspaceFolders); err != nil {
+		w.Log("Failed to initialize al-call-hierarchy: %v", err)
+		w.callHierarchyServer.Shutdown()
+		w.callHierarchyServer = nil
+		return
+	}
+
+	w.Log("al-call-hierarchy server ready")
 }
