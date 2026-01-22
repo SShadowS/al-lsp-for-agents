@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- Python 3.x (for running test scripts)
-- Built binaries in `bin/` directory
+- Python 3.x (for running test scripts only)
+- Built binaries in platform-specific `bin/` directories
 
 ## Running Tests
 
@@ -15,9 +15,6 @@ python test_lsp_go.py --wrapper go
 
 # Test the launcher
 python test_launcher.py
-
-# Compare Go and Python wrappers
-python test_lsp_go.py --wrapper both
 
 # Show wrapper logs after tests
 python test_lsp_go.py --wrapper go --show-logs

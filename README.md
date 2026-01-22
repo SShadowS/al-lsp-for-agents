@@ -4,11 +4,14 @@ Claude Code marketplace providing AL Language Server wrappers for Business Centr
 
 ## Available Wrappers
 
-| Wrapper | Runtime | Description |
-|---------|---------|-------------|
-| `al-language-server-python` | Python 3.10+ | Python wrapper for MS AL Language Server |
+| Wrapper | Platform | Description |
+|---------|----------|-------------|
+| `al-language-server-go-windows` | Windows | **Recommended** - Go wrapper with Code Lens & Call Hierarchy |
+| `al-language-server-go-linux` | Linux | **Recommended** - Go wrapper with Code Lens & Call Hierarchy |
+| `al-language-server-go-darwin` | macOS | **Recommended** - Go wrapper with Code Lens & Call Hierarchy |
+| `al-language-server-python` | Cross-platform | *Deprecated* - Basic LSP features only |
 
-*Future: Go-compiled binaries for faster startup and no runtime dependencies*
+> **Migration Note:** If you're using the Python wrapper, switch to the Go wrapper for your platform to get Code Lens (reference counts) and Call Hierarchy features.
 
 ## Features
 
@@ -22,9 +25,8 @@ Claude Code marketplace providing AL Language Server wrappers for Business Centr
 ## Prerequisites
 
 1. **VS Code** with the [AL Language extension](https://marketplace.visualstudio.com/items?itemName=ms-dynamics-smb.al) installed
-2. **Python 3.10+** in your PATH (for the Python wrapper)
 
-The wrapper automatically finds the newest AL extension version in your VS Code extensions folder.
+The Go wrappers are compiled binaries with no runtime dependencies. The wrapper automatically finds the newest AL extension version in your VS Code extensions folder.
 
 ## Installation
 
@@ -55,8 +57,11 @@ claude
 
 1. Type `/plugins`
 2. Tab to `Marketplaces`
-3. Enter `al-lsp-wrappers` marketplace
-4. Select `al-language-server-python` with spacebar
+3. Enter `claude-code-lsps` marketplace
+4. Select the Go wrapper for your platform:
+   - Windows: `al-language-server-go-windows`
+   - Linux: `al-language-server-go-linux`
+   - macOS: `al-language-server-go-darwin`
 5. Press "i" to install
 6. Restart Claude Code
 
@@ -90,4 +95,4 @@ See [KnownIssues.md](KnownIssues.md) for full details and technical analysis.
 
 ## License
 
-MIT
+[GNU General Public License v3.0](https://choosealicense.com/licenses/gpl-3.0/)

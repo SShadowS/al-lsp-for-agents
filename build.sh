@@ -2,6 +2,10 @@
 # Build script for AL Language Server wrappers
 # Builds Go wrappers and fetches linked executables (al-call-hierarchy)
 #
+# Note: The Python wrapper is deprecated (v1.3.11+). The build script still
+# copies al-call-hierarchy binaries to Python directories for backwards
+# compatibility with existing installations.
+#
 # Usage: ./build.sh [--skip-go] [--skip-rust]
 
 set -e
