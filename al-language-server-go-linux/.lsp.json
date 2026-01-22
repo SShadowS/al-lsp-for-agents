@@ -1,10 +1,7 @@
 {
   "al": {
-    "command": "bash",
-    "args": [
-      "-c",
-      "exe=$(ls -t \"$HOME/.claude/plugins/cache/claude-code-lsps/al-language-server-go-linux\"/*/bin/al-lsp-wrapper 2>/dev/null | head -1); [ -x \"$exe\" ] && exec \"$exe\" || { echo 'AL LSP wrapper not found' >&2; exit 1; }"
-    ],
+    "command": "${CLAUDE_PLUGIN_ROOT}/bin/al-lsp-wrapper",
+    "args": [],
     "extensionToLanguage": {
       ".al": "al",
       ".dal": "al"

@@ -1,6 +1,6 @@
 {
   "al": {
-    "command": "${pluginDir}/bin/al-lsp-launcher.exe",
+    "command": "${CLAUDE_PLUGIN_ROOT}/bin/al-lsp-wrapper.exe",
     "args": [],
     "extensionToLanguage": {
       ".al": "al",

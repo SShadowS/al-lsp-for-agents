@@ -19,3 +19,6 @@ tmpclaude-*
 CLAUDE.md
 .claude/
 .alpackages/
+
+# Dev marketplace (local testing only)
+.claude-plugin-dev/
