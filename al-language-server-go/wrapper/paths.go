@@ -20,42 +20,65 @@ type alExtensionVersion struct {
 	patch   int
 }
 
-// FindALExtension locates the newest AL extension in VS Code extensions directory
+// vsCodeExtensionDirs lists all known VS Code variant extension directories (relative to home)
+// Searched in priority order: stable VS Code first, then variants
+var vsCodeExtensionDirs = []string{
+	".vscode/extensions",                 // VS Code (stable)
+	".vscode-insiders/extensions",        // VS Code Insiders
+	".vscode-server/extensions",          // VS Code Server (Remote SSH, WSL, etc.)
+	".vscode-server-insiders/extensions", // VS Code Server Insiders
+	".vscode-oss/extensions",             // VSCodium
+	".cursor/extensions",                 // Cursor
+}
+
+// FindALExtension locates the newest AL extension across all VS Code variant directories
 func FindALExtension() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
+	return findALExtensionInHome(home)
+}
 
-	extensionsDir := filepath.Join(home, ".vscode", "extensions")
-	entries, err := os.ReadDir(extensionsDir)
-	if err != nil {
-		return "", fmt.Errorf("failed to read VS Code extensions directory: %w", err)
-	}
-
+// findALExtensionInHome is the internal implementation that searches for AL extensions
+// starting from the given home directory. Exported for testing.
+func findALExtensionInHome(home string) (string, error) {
 	// Find all AL extensions matching the pattern ms-dynamics-smb.al-*
 	pattern := regexp.MustCompile(`^ms-dynamics-smb\.al-(\d+)\.(\d+)\.(\d+)$`)
 	var alExtensions []alExtensionVersion
+	var searchedDirs []string
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			matches := pattern.FindStringSubmatch(entry.Name())
-			if matches != nil {
-				major, _ := strconv.Atoi(matches[1])
-				minor, _ := strconv.Atoi(matches[2])
-				patch, _ := strconv.Atoi(matches[3])
-				alExtensions = append(alExtensions, alExtensionVersion{
-					path:  filepath.Join(extensionsDir, entry.Name()),
-					major: major,
-					minor: minor,
-					patch: patch,
-				})
+	// Search all VS Code variant directories
+	for _, relDir := range vsCodeExtensionDirs {
+		extensionsDir := filepath.Join(home, relDir)
+		searchedDirs = append(searchedDirs, extensionsDir)
+
+		entries, err := os.ReadDir(extensionsDir)
+		if err != nil {
+			// Directory doesn't exist or can't be read, try next
+			continue
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				matches := pattern.FindStringSubmatch(entry.Name())
+				if matches != nil {
+					major, _ := strconv.Atoi(matches[1])
+					minor, _ := strconv.Atoi(matches[2])
+					patch, _ := strconv.Atoi(matches[3])
+					alExtensions = append(alExtensions, alExtensionVersion{
+						path:  filepath.Join(extensionsDir, entry.Name()),
+						major: major,
+						minor: minor,
+						patch: patch,
+					})
+				}
 			}
 		}
 	}
 
 	if len(alExtensions) == 0 {
-		return "", fmt.Errorf("AL extension not found in %s", extensionsDir)
+		return "", fmt.Errorf("AL extension not found in any of: %s", strings.Join(searchedDirs, ", "))
 	}
 
 	// Sort by version (newest first) using proper semver comparison
