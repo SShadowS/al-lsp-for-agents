@@ -9,6 +9,12 @@ import subprocess
 import sys
 import os
 import time
+import io
+
+# Fix Windows console encoding for emoji/unicode
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional, Any, List, Tuple
@@ -338,6 +344,38 @@ class LSPTester:
 
         return self.add_result("CallHierarchy", False, "Empty or null result", response)
 
+    def test_code_lens(self) -> TestResult:
+        """Test textDocument/codeLens on a codeunit file."""
+        # Use CodeQualityTest.Codeunit.al which has procedures with high complexity and many params
+        codeunit_file = os.path.join(TEST_PROJECT, "src", "Codeunits", "CodeQualityTest.Codeunit.al")
+        file_uri = Path(codeunit_file).as_uri()
+
+        _, response = self.request("textDocument/codeLens", {
+            "textDocument": {"uri": file_uri}
+        })
+
+        if not response:
+            return self.add_result("CodeLens", False, "No response (timeout)")
+
+        if "error" in response:
+            error_code = response["error"].get("code", 0)
+            return self.add_result("CodeLens", False, f"Error (code: {error_code}): {response['error'].get('message', 'unknown')}", response)
+
+        if "result" in response:
+            items = response["result"]
+            if items is None:
+                return self.add_result("CodeLens", False, "Result is null")
+            if isinstance(items, list):
+                if len(items) > 0:
+                    # Show first few items
+                    sample = items[:3]
+                    titles = [item.get('command', {}).get('title', 'N/A') for item in sample]
+                    return self.add_result("CodeLens", True, f"Found {len(items)} lens items (e.g., {titles})", response)
+                else:
+                    return self.add_result("CodeLens", False, "Empty result array")
+
+        return self.add_result("CodeLens", False, "Unexpected result format", response)
+
     def run_all_tests(self):
         """Run all tests."""
         print(f"\n{'='*60}")
@@ -362,6 +400,7 @@ class LSPTester:
             self.test_workspace_symbol_path_workaround()
             self.test_references()
             self.test_call_hierarchy()
+            self.test_code_lens()
 
         finally:
             self.stop()

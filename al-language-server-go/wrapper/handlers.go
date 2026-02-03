@@ -351,16 +351,23 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 	// Forward to AL LSP
 	response, err := w.SendRequestToLSP("textDocument/hover", params)
 	if err != nil {
-		w.Log("Failed to send hover request: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		w.Log("Hover request failed: %v, returning null", err)
+		// Return null result instead of error - hover is optional
+		return &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  json.RawMessage("null"),
+		}, nil
 	}
 
 	if response.Error != nil {
-		return nil, &Message{
+		w.Log("Hover response error: %s, returning null", response.Error.Message)
+		// Return null result instead of error - hover is optional
+		return &Message{
 			JSONRPC: "2.0",
 			ID:      msg.ID,
-			Error:   response.Error,
-		}
+			Result:  json.RawMessage("null"),
+		}, nil
 	}
 
 	return &Message{

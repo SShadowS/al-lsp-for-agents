@@ -588,6 +588,7 @@ func (w *ALLSPWrapper) GetCallHierarchyServer() *CallHierarchyServer {
 // startCallHierarchyServer starts the al-call-hierarchy server
 func (w *ALLSPWrapper) startCallHierarchyServer() {
 	w.callHierarchyServer = NewCallHierarchyServer(w.Log)
+	w.callHierarchyServer.SetClientWriter(w.clientWriter)
 
 	executable := w.callHierarchyServer.FindExecutable()
 	if executable == "" {

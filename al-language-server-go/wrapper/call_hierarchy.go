@@ -27,6 +27,10 @@ type CallHierarchyServer struct {
 	pendingMu  sync.Mutex
 	pendingReqs map[int]chan *Message
 
+	// Client writer for forwarding notifications
+	clientWriter   io.Writer
+	clientWriterMu sync.Mutex
+
 	logFunc func(format string, args ...interface{})
 }
 
@@ -42,6 +46,13 @@ func (s *CallHierarchyServer) log(format string, args ...interface{}) {
 	if s.logFunc != nil {
 		s.logFunc("[CallHierarchy] "+format, args...)
 	}
+}
+
+// SetClientWriter sets the client writer for forwarding notifications
+func (s *CallHierarchyServer) SetClientWriter(writer io.Writer) {
+	s.clientWriterMu.Lock()
+	defer s.clientWriterMu.Unlock()
+	s.clientWriter = writer
 }
 
 // FindExecutable finds the al-call-hierarchy executable
@@ -151,6 +162,18 @@ func (s *CallHierarchyServer) readResponses() {
 				delete(s.pendingReqs, id)
 			}
 			s.pendingMu.Unlock()
+		} else if msg.IsNotification() {
+			// Forward notifications (like textDocument/publishDiagnostics) to client
+			s.clientWriterMu.Lock()
+			writer := s.clientWriter
+			s.clientWriterMu.Unlock()
+
+			if writer != nil {
+				s.log("Forwarding notification to client: %s", msg.Method)
+				if err := WriteMessage(writer, msg); err != nil {
+					s.log("Error forwarding notification: %v", err)
+				}
+			}
 		}
 	}
 }
