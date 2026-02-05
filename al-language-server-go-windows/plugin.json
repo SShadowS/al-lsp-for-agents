@@ -1,6 +1,6 @@
 {
   "name": "al-language-server-go-windows",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "AL language server wrapper (Go) for Windows - includes Code Lens, Call Hierarchy, and unused procedure detection",
   "author": {
     "name": "SShadowS"
