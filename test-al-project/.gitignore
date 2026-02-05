@@ -7,7 +7,10 @@
 
 # VS Code
 .vscode/
-.snapshots/
+
+# Snapshots (ignore all except client capabilities baseline)
+.snapshots/*
+!.snapshots/claude-code-client-capabilities.json
 
 # Business Central
 .netpackages/

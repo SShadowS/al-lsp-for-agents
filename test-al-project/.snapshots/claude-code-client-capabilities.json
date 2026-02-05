@@ -1,0 +1,44 @@
+{
+  "_meta": {
+    "description": "Claude Code LSP client capabilities baseline",
+    "captured_from": "Claude Code CLI",
+    "last_updated": "2026-02-05",
+    "notes": "This file tracks the LSP capabilities that Claude Code sends during initialize. Update when capabilities change."
+  },
+  "workspace": {
+    "workspaceEdit": {},
+    "didChangeConfiguration": {},
+    "didChangeWatchedFiles": {},
+    "symbol": {},
+    "executeCommand": {}
+  },
+  "textDocument": {
+    "synchronization": {
+      "didSave": true
+    },
+    "completion": {
+      "completionItem": {}
+    },
+    "hover": {},
+    "signatureHelp": {},
+    "definition": {},
+    "references": {},
+    "documentHighlight": {},
+    "documentSymbol": {},
+    "codeAction": {},
+    "codeLens": {},
+    "formatting": {},
+    "rangeFormatting": {},
+    "onTypeFormatting": {},
+    "rename": {},
+    "documentLink": {},
+    "publishDiagnostics": {
+      "relatedInformation": true
+    }
+  },
+  "window": {
+    "showMessage": {
+      "messageActionItem": {}
+    }
+  }
+}
