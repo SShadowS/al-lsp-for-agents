@@ -107,17 +107,14 @@ if [ "$SKIP_GO" = false ]; then
 
     echo "Building for Windows..."
     go build -ldflags="-s -w" -o ../al-language-server-go-windows/bin/al-lsp-wrapper.exe .
-    go build -ldflags="-s -w" -o ../al-language-server-go-windows/bin/al-lsp-launcher.exe ./cmd/launcher
     echo "  -> al-language-server-go-windows/bin/"
 
     echo "Building for Linux..."
     GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../al-language-server-go-linux/bin/al-lsp-wrapper .
-    GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../al-language-server-go-linux/bin/al-lsp-launcher ./cmd/launcher
     echo "  -> al-language-server-go-linux/bin/"
 
     echo "Building for macOS..."
     GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o ../al-language-server-go-darwin/bin/al-lsp-wrapper .
-    GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o ../al-language-server-go-darwin/bin/al-lsp-launcher ./cmd/launcher
     echo "  -> al-language-server-go-darwin/bin/"
 else
     echo ""

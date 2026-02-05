@@ -13,9 +13,6 @@ From `test-al-project/`:
 # Test the wrapper (all LSP operations)
 python test_lsp_go.py --wrapper go
 
-# Test the launcher
-python test_launcher.py
-
 # Show wrapper logs after tests
 python test_lsp_go.py --wrapper go --show-logs
 ```
@@ -35,15 +32,6 @@ python test_lsp_go.py --wrapper go --show-logs
 | WorkspaceSymbol (path) | Path-as-query workaround for Claude Code bug |
 | References | Find all references to a symbol |
 | CallHierarchy | Returns proper "not supported" error |
-
-### Launcher Tests (`test_launcher.py`)
-
-| Test | Description |
-|------|-------------|
-| Wrapper not found | Graceful error when wrapper missing from cache |
-| Finds wrapper | Locates wrapper in plugin cache |
-| Picks newest version | Correct semver sorting (17.x > 9.x) |
-| Stdin/stdout passthrough | Full LSP roundtrip through launcher |
 
 ## Test Output
 
