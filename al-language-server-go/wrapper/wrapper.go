@@ -2,14 +2,29 @@ package wrapper
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
+)
+
+const (
+	// maxLogFileSize is the maximum size of the log file before rotation (20MB)
+	maxLogFileSize = 20 * 1024 * 1024
+	// logFileTruncateSize is the size to keep after rotation (10MB)
+	logFileTruncateSize = 10 * 1024 * 1024
+	// logFileMaxAge is the maximum age of stale log files before cleanup (24 hours)
+	logFileMaxAge = 24 * time.Hour
+	// logSizeCheckInterval is how often to check log file size (every N writes)
+	logSizeCheckInterval = 100
 )
 
 // ALLSPWrapper wraps the AL Language Server
@@ -45,8 +60,9 @@ type ALLSPWrapper struct {
 	callHierarchyServer *CallHierarchyServer
 
 	// Logging
-	logFile *os.File
-	logMu   sync.Mutex
+	logFile       *os.File
+	logMu         sync.Mutex
+	logWriteCount int
 
 	// Initialization
 	initialized bool
@@ -152,6 +168,9 @@ func (w *ALLSPWrapper) Run() error {
 }
 
 func (w *ALLSPWrapper) setupLogging() error {
+	// Clean up old log files from dead processes first
+	w.cleanupOldLogs()
+
 	logPath := GetLogPath()
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -170,10 +189,132 @@ func (w *ALLSPWrapper) Log(format string, args ...interface{}) {
 		return
 	}
 
+	// Check log file size periodically (avoid stat() on every write)
+	w.logWriteCount++
+	if w.logWriteCount >= logSizeCheckInterval {
+		w.logWriteCount = 0
+		w.checkAndRotateLog()
+	}
+
 	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
 	msg := fmt.Sprintf(format, args...)
 	fmt.Fprintf(w.logFile, "[%s] %s\n", timestamp, msg)
 	w.logFile.Sync()
+}
+
+// checkAndRotateLog checks if the log file exceeds the maximum size and rotates if needed
+// Must be called with logMu held
+func (w *ALLSPWrapper) checkAndRotateLog() {
+	if w.logFile == nil {
+		return
+	}
+
+	info, err := w.logFile.Stat()
+	if err != nil || info.Size() < maxLogFileSize {
+		return
+	}
+
+	// Close current file
+	w.logFile.Close()
+
+	// Truncate by keeping last portion
+	w.truncateLogFile()
+
+	// Reopen the log file
+	logPath := GetLogPath()
+	w.logFile, _ = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+}
+
+// truncateLogFile keeps only the last logFileTruncateSize bytes of the log file
+// Must be called with logMu held
+func (w *ALLSPWrapper) truncateLogFile() {
+	path := GetLogPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	// Keep last portion
+	if len(data) > logFileTruncateSize {
+		data = data[len(data)-logFileTruncateSize:]
+		// Find first newline to avoid partial lines
+		if idx := bytes.IndexByte(data, '\n'); idx > 0 {
+			data = data[idx+1:]
+		}
+	}
+
+	// Write truncated content
+	_ = os.WriteFile(path, data, 0644)
+}
+
+// cleanupOldLogs removes log files from dead processes that are older than logFileMaxAge
+func (w *ALLSPWrapper) cleanupOldLogs() {
+	pattern := GetLogPattern()
+	currentLog := GetLogPath()
+
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+
+	for _, path := range matches {
+		// Skip our own log file
+		if path == currentLog {
+			continue
+		}
+
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+
+		// Only delete if older than max age
+		if time.Since(info.ModTime()) > logFileMaxAge {
+			// Extract PID from filename to check if process is still running
+			pid := extractPIDFromLogPath(path)
+			if pid > 0 && isProcessRunning(pid) {
+				// Process is still running, skip this file
+				continue
+			}
+
+			// Delete the old log file (ignore errors - file may be locked)
+			_ = os.Remove(path)
+		}
+	}
+}
+
+// extractPIDFromLogPath extracts the PID from a log file path like "al-lsp-wrapper-go-12345.log"
+func extractPIDFromLogPath(path string) int {
+	base := filepath.Base(path)
+	// Pattern: al-lsp-wrapper-go-{pid}.log
+	prefix := "al-lsp-wrapper-go-"
+	suffix := ".log"
+
+	if !strings.HasPrefix(base, prefix) || !strings.HasSuffix(base, suffix) {
+		return 0
+	}
+
+	pidStr := base[len(prefix) : len(base)-len(suffix)]
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return 0
+	}
+
+	return pid
+}
+
+// isProcessRunning checks if a process with the given PID is still running
+func isProcessRunning(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+
+	// On Unix, FindProcess always succeeds, so we need to send signal 0 to check
+	// On Windows, FindProcess also always succeeds, but signal 0 returns an error
+	// for processes that don't exist. The syscall.Signal(0) approach works cross-platform.
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
 }
 
 func (w *ALLSPWrapper) readStderr() {

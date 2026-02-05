@@ -1,6 +1,6 @@
 {
   "name": "al-language-server-go-darwin",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "AL language server wrapper (Go) for macOS - includes Code Lens, Call Hierarchy, and unused procedure detection",
   "author": {
     "name": "SShadowS"

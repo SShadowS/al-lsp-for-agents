@@ -186,8 +186,13 @@ func NormalizePath(path string) string {
 	return filepath.Clean(absPath)
 }
 
-// GetLogPath returns the path for the log file
+// GetLogPath returns the path for the log file (includes PID for multi-instance support)
 func GetLogPath() string {
+	return filepath.Join(GetLogDir(), fmt.Sprintf("al-lsp-wrapper-go-%d.log", os.Getpid()))
+}
+
+// GetLogDir returns the directory for log files
+func GetLogDir() string {
 	var tempDir string
 
 	if runtime.GOOS == "windows" {
@@ -202,7 +207,12 @@ func GetLogPath() string {
 		tempDir = "/tmp"
 	}
 
-	return filepath.Join(tempDir, "al-lsp-wrapper-go.log")
+	return tempDir
+}
+
+// GetLogPattern returns the glob pattern for finding log files
+func GetLogPattern() string {
+	return filepath.Join(GetLogDir(), "al-lsp-wrapper-go-*.log")
 }
 
 // ExtractSymbolFromPath extracts a symbol name from a file path
