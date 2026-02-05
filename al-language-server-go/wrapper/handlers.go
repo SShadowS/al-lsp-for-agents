@@ -373,8 +373,124 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
-		Result:  response.Result,
+		Result:  normalizeHoverResult(response.Result),
 	}, nil
+}
+
+// normalizeHoverResult converts deprecated hover content formats to MarkupContent.
+// Claude Code's LSP client expects { kind: "markdown"|"plaintext", value: "..." }
+// but the AL LSP may return MarkedString, plain string, or array formats.
+func normalizeHoverResult(result json.RawMessage) json.RawMessage {
+	if result == nil || string(result) == "null" {
+		return result
+	}
+
+	// Parse the hover result to inspect contents
+	var hover struct {
+		Contents json.RawMessage `json:"contents"`
+		Range    json.RawMessage `json:"range,omitempty"`
+	}
+	if err := json.Unmarshal(result, &hover); err != nil {
+		return result // Can't parse, return as-is
+	}
+	if hover.Contents == nil || string(hover.Contents) == "null" {
+		return result
+	}
+
+	normalized := normalizeContents(hover.Contents)
+	if normalized == nil {
+		return result
+	}
+
+	// Rebuild the hover object with normalized contents
+	out := map[string]json.RawMessage{
+		"contents": normalized,
+	}
+	if hover.Range != nil && string(hover.Range) != "null" {
+		out["range"] = hover.Range
+	}
+	res, err := json.Marshal(out)
+	if err != nil {
+		return result
+	}
+	return res
+}
+
+// normalizeContents converts hover contents to MarkupContent format.
+func normalizeContents(contents json.RawMessage) json.RawMessage {
+	// Try MarkupContent first: { kind: "...", value: "..." }
+	var markup struct {
+		Kind  string `json:"kind"`
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(contents, &markup); err == nil && markup.Kind != "" {
+		return nil // Already MarkupContent, no change needed
+	}
+
+	// Try MarkedString: { language: "...", value: "..." }
+	var marked struct {
+		Language string `json:"language"`
+		Value    string `json:"value"`
+	}
+	if err := json.Unmarshal(contents, &marked); err == nil && marked.Language != "" {
+		return makeMarkupContent("```" + marked.Language + "\n" + marked.Value + "\n```")
+	}
+
+	// Try plain string
+	var str string
+	if err := json.Unmarshal(contents, &str); err == nil {
+		return makeMarkupContent(str)
+	}
+
+	// Try array of MarkedString or strings
+	var arr []json.RawMessage
+	if err := json.Unmarshal(contents, &arr); err == nil && len(arr) > 0 {
+		var parts []string
+		for _, item := range arr {
+			// Try MarkedString
+			var ms struct {
+				Language string `json:"language"`
+				Value    string `json:"value"`
+			}
+			if err := json.Unmarshal(item, &ms); err == nil && ms.Language != "" {
+				parts = append(parts, "```"+ms.Language+"\n"+ms.Value+"\n```")
+				continue
+			}
+			// Try plain string
+			var s string
+			if err := json.Unmarshal(item, &s); err == nil {
+				parts = append(parts, s)
+				continue
+			}
+			// Try MarkupContent in array
+			var mc struct {
+				Kind  string `json:"kind"`
+				Value string `json:"value"`
+			}
+			if err := json.Unmarshal(item, &mc); err == nil && mc.Kind != "" {
+				parts = append(parts, mc.Value)
+				continue
+			}
+		}
+		if len(parts) > 0 {
+			return makeMarkupContent(strings.Join(parts, "\n\n---\n\n"))
+		}
+	}
+
+	return nil // Unknown format, don't modify
+}
+
+// makeMarkupContent creates a MarkupContent JSON with kind "markdown".
+func makeMarkupContent(value string) json.RawMessage {
+	mc := struct {
+		Kind  string `json:"kind"`
+		Value string `json:"value"`
+	}{
+		Kind:  "markdown",
+		Value: value,
+	}
+	data, _ := json.Marshal(mc)
+	return data
 }
 
 // DocumentSymbolHandler handles textDocument/documentSymbol
