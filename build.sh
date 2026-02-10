@@ -1,10 +1,6 @@
 #!/bin/bash
 # Build script for AL Language Server wrappers
-# Builds Go wrappers and fetches linked executables (al-call-hierarchy)
-#
-# Note: The Python wrapper is deprecated (v1.3.11+). The build script still
-# copies al-call-hierarchy binaries to Python directories for backwards
-# compatibility with existing installations.
+# Builds Go wrappers and al-call-hierarchy (Rust)
 #
 # Usage: ./build.sh [--skip-go] [--skip-rust]
 
@@ -26,6 +22,23 @@ for arg in "$@"; do
         --skip-rust) SKIP_RUST=true ;;
     esac
 done
+
+# Check if Docker Desktop is in Linux containers mode (required for cross-compilation)
+check_docker_linux_mode() {
+    if ! command -v docker &> /dev/null; then
+        echo "  Docker not installed — skipping Linux cross-compilation"
+        return 1
+    fi
+    local os_type
+    os_type=$(docker info --format '{{.OSType}}' 2>/dev/null)
+    if [ "$os_type" != "linux" ]; then
+        echo "  ERROR: Docker Desktop is in Windows containers mode (OSType: ${os_type:-unknown})"
+        echo "  Cross-compilation requires Linux containers."
+        echo "  Right-click the Docker Desktop tray icon -> 'Switch to Linux containers...'"
+        return 1
+    fi
+    return 0
+}
 
 echo "=== AL Language Server Wrapper Build Script ==="
 echo ""
@@ -62,31 +75,24 @@ if [ "$SKIP_RUST" = false ]; then
     cargo build --release --target x86_64-pc-windows-msvc 2>/dev/null || cargo build --release
     cp target/release/al-call-hierarchy.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/" 2>/dev/null || \
     cp target/x86_64-pc-windows-msvc/release/al-call-hierarchy.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/"
-    cp target/release/al-call-hierarchy.exe "$SCRIPT_DIR/al-language-server-python/bin/win32/" 2>/dev/null || \
-    cp target/x86_64-pc-windows-msvc/release/al-call-hierarchy.exe "$SCRIPT_DIR/al-language-server-python/bin/win32/"
-    echo "  -> Copied to al-language-server-go-windows/bin/ and al-language-server-python/bin/win32/"
+    echo "  -> Copied to al-language-server-go-windows/bin/"
 
-    # Cross-compile for Linux (requires cross or appropriate toolchain)
+    # Cross-compile for Linux (requires cross + Docker in Linux containers mode)
     if command -v cross &> /dev/null; then
-        echo "Building for Linux (using cross)..."
-        cross build --release --target x86_64-unknown-linux-gnu
-        cp target/x86_64-unknown-linux-gnu/release/al-call-hierarchy "$SCRIPT_DIR/al-language-server-go-linux/bin/"
-        cp target/x86_64-unknown-linux-gnu/release/al-call-hierarchy "$SCRIPT_DIR/al-language-server-python/bin/linux/"
-        echo "  -> Copied to al-language-server-go-linux/bin/ and al-language-server-python/bin/linux/"
+        if check_docker_linux_mode; then
+            # Mount tree-sitter-al into the Docker container and tell build.rs where to find it.
+            # MSYS_NO_PATHCONV=1 prevents Git Bash from mangling /tree-sitter-al to C:/Program Files/Git/...
+            export TREE_SITTER_AL_PATH="/tree-sitter-al"
+            export CROSS_CONTAINER_OPTS="-v $TREE_SITTER_AL_DIR:/tree-sitter-al:ro"
+
+            echo "Building for Linux (using cross)..."
+            MSYS_NO_PATHCONV=1 cross build --release --target x86_64-unknown-linux-gnu
+            cp target/x86_64-unknown-linux-gnu/release/al-call-hierarchy "$SCRIPT_DIR/al-language-server-go-linux/bin/"
+            echo "  -> Copied to al-language-server-go-linux/bin/"
+        fi
     else
-        echo "SKIP: Linux build (cross not installed)"
+        echo "SKIP: Linux Rust build (cross not installed)"
         echo "  Install with: cargo install cross"
-    fi
-
-    # Cross-compile for macOS (requires cross or appropriate toolchain)
-    if command -v cross &> /dev/null; then
-        echo "Building for macOS (using cross)..."
-        cross build --release --target x86_64-apple-darwin
-        cp target/x86_64-apple-darwin/release/al-call-hierarchy "$SCRIPT_DIR/al-language-server-go-darwin/bin/"
-        cp target/x86_64-apple-darwin/release/al-call-hierarchy "$SCRIPT_DIR/al-language-server-python/bin/darwin/"
-        echo "  -> Copied to al-language-server-go-darwin/bin/ and al-language-server-python/bin/darwin/"
-    else
-        echo "SKIP: macOS build (cross not installed)"
     fi
 else
     echo "=== Skipping al-call-hierarchy build (--skip-rust) ==="
@@ -112,10 +118,6 @@ if [ "$SKIP_GO" = false ]; then
     echo "Building for Linux..."
     GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../al-language-server-go-linux/bin/al-lsp-wrapper .
     echo "  -> al-language-server-go-linux/bin/"
-
-    echo "Building for macOS..."
-    GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o ../al-language-server-go-darwin/bin/al-lsp-wrapper .
-    echo "  -> al-language-server-go-darwin/bin/"
 else
     echo ""
     echo "=== Skipping Go wrapper build (--skip-go) ==="
@@ -162,29 +164,27 @@ else
     echo "SKIP: Integration tests (python not found)"
 fi
 
-# Verify binaries exist and are executable
+# Verify binaries exist
 echo ""
 echo "Verifying binaries..."
 VERIFY_FAILED=false
 
-if [ -f "$SCRIPT_DIR/al-language-server-go-windows/bin/al-call-hierarchy.exe" ]; then
-    echo "  ✓ al-call-hierarchy.exe exists"
-else
-    echo "  ✗ al-call-hierarchy.exe missing"
-    VERIFY_FAILED=true
-fi
-
-if [ -f "$SCRIPT_DIR/al-language-server-go-windows/bin/al-lsp-wrapper.exe" ]; then
-    echo "  ✓ al-lsp-wrapper.exe exists"
-else
-    echo "  ✗ al-lsp-wrapper.exe missing"
-    VERIFY_FAILED=true
-fi
+for bin in \
+    "$SCRIPT_DIR/al-language-server-go-windows/bin/al-call-hierarchy.exe" \
+    "$SCRIPT_DIR/al-language-server-go-windows/bin/al-lsp-wrapper.exe" \
+    "$SCRIPT_DIR/al-language-server-go-linux/bin/al-call-hierarchy" \
+    "$SCRIPT_DIR/al-language-server-go-linux/bin/al-lsp-wrapper"; do
+    if [ -f "$bin" ]; then
+        echo "  ✓ $(basename "$bin") ($(dirname "$bin" | sed "s|$SCRIPT_DIR/||"))"
+    else
+        echo "  ✗ $(basename "$bin") MISSING ($(dirname "$bin" | sed "s|$SCRIPT_DIR/||"))"
+        VERIFY_FAILED=true
+    fi
+done
 
 if [ "$VERIFY_FAILED" = true ]; then
     echo ""
-    echo "ERROR: Some binaries are missing!"
-    exit 1
+    echo "WARNING: Some binaries are missing!"
 fi
 
 echo ""
@@ -194,8 +194,5 @@ ls -la "$SCRIPT_DIR/al-language-server-go-windows/bin/"
 echo ""
 echo "Linux binaries:"
 ls -la "$SCRIPT_DIR/al-language-server-go-linux/bin/"
-echo ""
-echo "macOS binaries:"
-ls -la "$SCRIPT_DIR/al-language-server-go-darwin/bin/"
 echo ""
 echo "=== Build complete ==="

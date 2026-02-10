@@ -1,6 +1,7 @@
 package wrapper
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 )
@@ -41,13 +42,89 @@ func GetProjectRoot(filePath string) string {
 	return filepath.Dir(appJson)
 }
 
+// AppManifest represents the parsed content of app.json
+type AppManifest struct {
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Publisher    string          `json:"publisher"`
+	Version      string          `json:"version"`
+	Dependencies []AppDependency `json:"dependencies"`
+	Raw          string          `json:"-"` // original file content for al/loadManifest
+}
+
+// AppDependency represents a dependency entry in app.json
+type AppDependency struct {
+	ID        string `json:"id"`
+	AppID     string `json:"appId"`
+	Name      string `json:"name"`
+	Publisher string `json:"publisher"`
+	Version   string `json:"version"`
+}
+
+// GetAppID returns the app ID, checking both "id" and "appId" fields
+// (app.json uses both conventions)
+func (d *AppDependency) GetAppID() string {
+	if d.ID != "" {
+		return d.ID
+	}
+	return d.AppID
+}
+
+// ProjectReferenceDefinition represents a dependency for workspace settings
+type ProjectReferenceDefinition struct {
+	AppID     string `json:"appId"`
+	Name      string `json:"name"`
+	Publisher string `json:"publisher"`
+	Version   string `json:"version"`
+}
+
+// LoadManifestParams represents parameters for al/loadManifest
+type LoadManifestParams struct {
+	ProjectFolder string `json:"projectFolder"`
+	Manifest      string `json:"manifest"`
+}
+
+// ParseAppManifest reads and parses app.json from the given path
+func ParseAppManifest(appJsonPath string) *AppManifest {
+	data, err := os.ReadFile(appJsonPath)
+	if err != nil {
+		return nil
+	}
+
+	var manifest AppManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil
+	}
+
+	manifest.Raw = string(data)
+	return &manifest
+}
+
+// ToProjectReferenceDefinitions converts manifest dependencies to workspace settings format
+func (m *AppManifest) ToProjectReferenceDefinitions() []ProjectReferenceDefinition {
+	if m == nil || len(m.Dependencies) == 0 {
+		return []ProjectReferenceDefinition{}
+	}
+
+	refs := make([]ProjectReferenceDefinition, len(m.Dependencies))
+	for i, dep := range m.Dependencies {
+		refs[i] = ProjectReferenceDefinition{
+			AppID:     dep.GetAppID(),
+			Name:      dep.Name,
+			Publisher: dep.Publisher,
+			Version:   dep.Version,
+		}
+	}
+	return refs
+}
+
 // WorkspaceSettings represents AL workspace configuration
 type WorkspaceSettings struct {
 	WorkspacePath                     string                        `json:"workspacePath"`
 	ALResourceConfigurationSettings   ALResourceConfigurationSettings `json:"alResourceConfigurationSettings"`
 	SetActiveWorkspace                bool                          `json:"setActiveWorkspace"`
 	DependencyParentWorkspacePath     *string                       `json:"dependencyParentWorkspacePath"`
-	ExpectedProjectReferenceDefinitions []string                    `json:"expectedProjectReferenceDefinitions"`
+	ExpectedProjectReferenceDefinitions []ProjectReferenceDefinition `json:"expectedProjectReferenceDefinitions"`
 	ActiveWorkspaceClosure            []string                      `json:"activeWorkspaceClosure"`
 }
 
@@ -66,7 +143,14 @@ type ALResourceConfigurationSettings struct {
 }
 
 // NewWorkspaceSettings creates workspace settings for the given project root
-func NewWorkspaceSettings(projectRoot string) *WorkspaceSettings {
+func NewWorkspaceSettings(projectRoot string, manifest *AppManifest) *WorkspaceSettings {
+	var refs []ProjectReferenceDefinition
+	if manifest != nil {
+		refs = manifest.ToProjectReferenceDefinitions()
+	} else {
+		refs = []ProjectReferenceDefinition{}
+	}
+
 	return &WorkspaceSettings{
 		WorkspacePath: projectRoot,
 		ALResourceConfigurationSettings: ALResourceConfigurationSettings{
@@ -81,10 +165,10 @@ func NewWorkspaceSettings(projectRoot string) *WorkspaceSettings {
 			OutputAnalyzerStatistics: true,
 			EnableExternalRulesets:   true,
 		},
-		SetActiveWorkspace:                true,
-		DependencyParentWorkspacePath:     nil,
-		ExpectedProjectReferenceDefinitions: []string{},
-		ActiveWorkspaceClosure:            []string{projectRoot},
+		SetActiveWorkspace:                  true,
+		DependencyParentWorkspacePath:       nil,
+		ExpectedProjectReferenceDefinitions: refs,
+		ActiveWorkspaceClosure:              []string{projectRoot},
 	}
 }
 
@@ -102,14 +186,14 @@ type WorkspaceFolderPath struct {
 }
 
 // NewActiveWorkspaceParams creates parameters for al/setActiveWorkspace
-func NewActiveWorkspaceParams(projectRoot string) *ActiveWorkspaceParams {
+func NewActiveWorkspaceParams(projectRoot string, manifest *AppManifest) *ActiveWorkspaceParams {
 	return &ActiveWorkspaceParams{
 		CurrentWorkspaceFolderPath: WorkspaceFolderPath{
 			URI:   PathToFileURI(projectRoot),
 			Name:  filepath.Base(projectRoot),
 			Index: 0,
 		},
-		Settings: NewWorkspaceSettings(projectRoot),
+		Settings: NewWorkspaceSettings(projectRoot, manifest),
 	}
 }
 
@@ -163,6 +247,12 @@ type ClientCapabilities struct {
 	Workspace    WorkspaceCapabilities    `json:"workspace,omitempty"`
 	TextDocument TextDocumentCapabilities `json:"textDocument,omitempty"`
 	Window       WindowCapabilities       `json:"window,omitempty"`
+	General      *GeneralCapabilities     `json:"general,omitempty"`
+}
+
+// GeneralCapabilities represents general client capabilities
+type GeneralCapabilities struct {
+	PositionEncodings []string `json:"positionEncodings,omitempty"`
 }
 
 // WorkspaceCapabilities represents workspace-related capabilities
@@ -189,22 +279,46 @@ type DynamicRegistration struct {
 
 // TextDocumentCapabilities represents text document capabilities
 type TextDocumentCapabilities struct {
-	Synchronization    TextDocumentSyncCapability `json:"synchronization,omitempty"`
-	Completion         CompletionCapability       `json:"completion,omitempty"`
-	Hover              DynamicRegistration        `json:"hover,omitempty"`
-	SignatureHelp      DynamicRegistration        `json:"signatureHelp,omitempty"`
-	Definition         DynamicRegistration        `json:"definition,omitempty"`
-	References         DynamicRegistration        `json:"references,omitempty"`
-	DocumentHighlight  DynamicRegistration        `json:"documentHighlight,omitempty"`
-	DocumentSymbol     DynamicRegistration        `json:"documentSymbol,omitempty"`
-	CodeAction         DynamicRegistration        `json:"codeAction,omitempty"`
-	CodeLens           DynamicRegistration        `json:"codeLens,omitempty"`
-	Formatting         DynamicRegistration        `json:"formatting,omitempty"`
-	RangeFormatting    DynamicRegistration        `json:"rangeFormatting,omitempty"`
-	OnTypeFormatting   DynamicRegistration        `json:"onTypeFormatting,omitempty"`
-	Rename             DynamicRegistration        `json:"rename,omitempty"`
-	DocumentLink       DynamicRegistration        `json:"documentLink,omitempty"`
-	PublishDiagnostics PublishDiagnosticsCapability `json:"publishDiagnostics,omitempty"`
+	Synchronization    TextDocumentSyncCapability    `json:"synchronization,omitempty"`
+	Completion         CompletionCapability          `json:"completion,omitempty"`
+	Hover              HoverCapability               `json:"hover,omitempty"`
+	SignatureHelp      DynamicRegistration           `json:"signatureHelp,omitempty"`
+	Definition         DefinitionCapability          `json:"definition,omitempty"`
+	References         DynamicRegistration           `json:"references,omitempty"`
+	DocumentHighlight  DynamicRegistration           `json:"documentHighlight,omitempty"`
+	DocumentSymbol     DocumentSymbolCapability      `json:"documentSymbol,omitempty"`
+	CodeAction         DynamicRegistration           `json:"codeAction,omitempty"`
+	CodeLens           DynamicRegistration           `json:"codeLens,omitempty"`
+	Formatting         DynamicRegistration           `json:"formatting,omitempty"`
+	RangeFormatting    DynamicRegistration           `json:"rangeFormatting,omitempty"`
+	OnTypeFormatting   DynamicRegistration           `json:"onTypeFormatting,omitempty"`
+	Rename             DynamicRegistration           `json:"rename,omitempty"`
+	DocumentLink       DynamicRegistration           `json:"documentLink,omitempty"`
+	CallHierarchy      CallHierarchyCapability       `json:"callHierarchy,omitempty"`
+	PublishDiagnostics PublishDiagnosticsCapability   `json:"publishDiagnostics,omitempty"`
+}
+
+// HoverCapability represents hover capabilities
+type HoverCapability struct {
+	DynamicRegistration bool     `json:"dynamicRegistration,omitempty"`
+	ContentFormat       []string `json:"contentFormat,omitempty"`
+}
+
+// DefinitionCapability represents definition capabilities
+type DefinitionCapability struct {
+	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
+	LinkSupport         bool `json:"linkSupport,omitempty"`
+}
+
+// DocumentSymbolCapability represents document symbol capabilities
+type DocumentSymbolCapability struct {
+	DynamicRegistration               bool `json:"dynamicRegistration,omitempty"`
+	HierarchicalDocumentSymbolSupport bool `json:"hierarchicalDocumentSymbolSupport,omitempty"`
+}
+
+// CallHierarchyCapability represents call hierarchy capabilities
+type CallHierarchyCapability struct {
+	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
 }
 
 // TextDocumentSyncCapability represents text document sync capabilities
@@ -228,7 +342,16 @@ type CompletionItemCapability struct {
 
 // PublishDiagnosticsCapability represents publish diagnostics capabilities
 type PublishDiagnosticsCapability struct {
-	RelatedInformation bool `json:"relatedInformation,omitempty"`
+	RelatedInformation     bool                    `json:"relatedInformation,omitempty"`
+	TagSupport             *DiagnosticTagSupport   `json:"tagSupport,omitempty"`
+	VersionSupport         bool                    `json:"versionSupport,omitempty"`
+	CodeDescriptionSupport bool                    `json:"codeDescriptionSupport,omitempty"`
+	DataSupport            bool                    `json:"dataSupport,omitempty"`
+}
+
+// DiagnosticTagSupport represents diagnostic tag support
+type DiagnosticTagSupport struct {
+	ValueSet []int `json:"valueSet,omitempty"`
 }
 
 // WindowCapabilities represents window capabilities
@@ -284,12 +407,12 @@ func NewInitializeParams(workspaceRoot string) *InitializeParams {
 						SnippetSupport: true,
 					},
 				},
-				Hover:             DynamicRegistration{DynamicRegistration: true},
+				Hover:             HoverCapability{DynamicRegistration: true, ContentFormat: []string{"markdown", "plaintext"}},
 				SignatureHelp:     DynamicRegistration{DynamicRegistration: true},
-				Definition:        DynamicRegistration{DynamicRegistration: true},
+				Definition:        DefinitionCapability{DynamicRegistration: true, LinkSupport: true},
 				References:        DynamicRegistration{DynamicRegistration: true},
 				DocumentHighlight: DynamicRegistration{DynamicRegistration: true},
-				DocumentSymbol:    DynamicRegistration{DynamicRegistration: true},
+				DocumentSymbol:    DocumentSymbolCapability{DynamicRegistration: true, HierarchicalDocumentSymbolSupport: true},
 				CodeAction:        DynamicRegistration{DynamicRegistration: true},
 				CodeLens:          DynamicRegistration{DynamicRegistration: true},
 				Formatting:        DynamicRegistration{DynamicRegistration: true},
@@ -297,8 +420,13 @@ func NewInitializeParams(workspaceRoot string) *InitializeParams {
 				OnTypeFormatting:  DynamicRegistration{DynamicRegistration: true},
 				Rename:            DynamicRegistration{DynamicRegistration: true},
 				DocumentLink:      DynamicRegistration{DynamicRegistration: true},
+				CallHierarchy:     CallHierarchyCapability{DynamicRegistration: true},
 				PublishDiagnostics: PublishDiagnosticsCapability{
-					RelatedInformation: true,
+					RelatedInformation:     true,
+					TagSupport:             &DiagnosticTagSupport{ValueSet: []int{1, 2}},
+					VersionSupport:         true,
+					CodeDescriptionSupport: true,
+					DataSupport:            true,
 				},
 			},
 			Window: WindowCapabilities{

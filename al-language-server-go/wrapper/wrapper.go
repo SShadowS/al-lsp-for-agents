@@ -42,6 +42,7 @@ type ALLSPWrapper struct {
 	// State tracking
 	openedFiles         map[string]bool
 	initializedProjects map[string]bool
+	projectManifests    map[string]*AppManifest
 	workspaceRoot       string
 
 	// Request tracking
@@ -74,6 +75,7 @@ func New() *ALLSPWrapper {
 	return &ALLSPWrapper{
 		openedFiles:         make(map[string]bool),
 		initializedProjects: make(map[string]bool),
+		projectManifests:    make(map[string]*AppManifest),
 		pendingReqs:         make(map[int]chan *Message),
 		responseQueue:       make(map[int]*Message),
 		handlers:            GetDefaultHandlers(),
@@ -342,14 +344,114 @@ func (w *ALLSPWrapper) readFromLSP() error {
 			if ch, ok := w.pendingReqs[id]; ok {
 				ch <- msg
 				delete(w.pendingReqs, id)
+			} else {
+				w.Log("WARNING: Received response for unknown request id=%d", id)
 			}
 			w.pendingMu.Unlock()
+		} else if msg.IsRequest() {
+			// Server-initiated request (e.g., client/registerCapability, workspace/configuration)
+			w.Log("Received server request: method=%s id=%s", msg.Method, msg.GetIDString())
+			w.handleServerRequest(msg)
 		} else if msg.IsNotification() {
 			// Forward notifications to client
 			w.Log("Forwarding notification to client: %s", msg.Method)
 			if err := WriteMessage(w.clientWriter, msg); err != nil {
 				w.Log("Error forwarding notification: %v", err)
 			}
+		} else {
+			w.Log("WARNING: Unclassified message from AL LSP: method=%s id=%s", msg.Method, msg.GetIDString())
+		}
+	}
+}
+
+// handleServerRequest handles requests sent from the AL LSP to the client.
+// These must be responded to or the AL LSP will block waiting for a response.
+func (w *ALLSPWrapper) handleServerRequest(msg *Message) {
+	switch msg.Method {
+	case "client/registerCapability", "client/unregisterCapability":
+		// Acknowledge capability registration (required by protocol)
+		resp := &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  json.RawMessage("null"),
+		}
+		if err := WriteMessage(w.stdin, resp); err != nil {
+			w.Log("Error responding to %s: %v", msg.Method, err)
+		}
+
+	case "workspace/configuration":
+		// Parse the configuration items to extract workspace paths
+		var params struct {
+			Items []struct {
+				ScopeURI string `json:"scopeUri"`
+				Section  string `json:"section"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			w.Log("Failed to parse workspace/configuration params: %v", err)
+		}
+		w.Log("workspace/configuration request: %d items", len(params.Items))
+
+		// Return an array of null values (standard LSP response)
+		results := make([]interface{}, len(params.Items))
+		resultJSON, _ := json.Marshal(results)
+		resp := &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  resultJSON,
+		}
+		if err := WriteMessage(w.stdin, resp); err != nil {
+			w.Log("Error responding to workspace/configuration: %v", err)
+		}
+
+		// Like VS Code's AL extension, also send workspace/didChangeConfiguration
+		// for each item's workspace. The AL LSP needs this to fully initialize.
+		sentPaths := make(map[string]bool)
+		for _, item := range params.Items {
+			wsPath := ""
+			if item.ScopeURI != "" {
+				if p, err := FileURIToPath(item.ScopeURI); err == nil {
+					wsPath = NormalizePath(p)
+				}
+			}
+			if wsPath == "" && w.workspaceRoot != "" {
+				wsPath = NormalizePath(w.workspaceRoot)
+			}
+			if wsPath == "" || sentPaths[wsPath] {
+				continue
+			}
+			sentPaths[wsPath] = true
+
+			w.Log("Sending workspace/didChangeConfiguration for: %s", wsPath)
+			manifest := w.GetManifest(wsPath)
+			settings := NewWorkspaceSettings(wsPath, manifest)
+			configParams := DidChangeConfigurationParams{Settings: settings}
+			if err := w.SendNotificationToLSP("workspace/didChangeConfiguration", configParams); err != nil {
+				w.Log("Error sending didChangeConfiguration: %v", err)
+			}
+		}
+
+	case "window/workDoneProgress/create":
+		// Acknowledge progress creation
+		resp := &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  json.RawMessage("null"),
+		}
+		if err := WriteMessage(w.stdin, resp); err != nil {
+			w.Log("Error responding to %s: %v", msg.Method, err)
+		}
+
+	default:
+		// Unknown server request — send empty success response to unblock the server
+		w.Log("Unhandled server request: %s, sending empty response", msg.Method)
+		resp := &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  json.RawMessage("null"),
+		}
+		if err := WriteMessage(w.stdin, resp); err != nil {
+			w.Log("Error responding to %s: %v", msg.Method, err)
 		}
 	}
 }
@@ -466,7 +568,7 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 		// Also forward document events to call hierarchy server
 		if w.callHierarchyServer != nil && w.callHierarchyServer.IsInitialized() {
 			switch msg.Method {
-			case "textDocument/didOpen", "textDocument/didClose", "textDocument/didChange":
+			case "textDocument/didOpen", "textDocument/didClose", "textDocument/didChange", "textDocument/didSave":
 				w.Log("Forwarding %s to al-call-hierarchy", msg.Method)
 				w.callHierarchyServer.SendNotification(msg.Method, params)
 			}
@@ -530,12 +632,17 @@ func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
 		return nil, fmt.Errorf("failed to initialize AL LSP: %w", err)
 	}
 
+	// Log AL LSP server capabilities
+	w.Log("=== AL LSP SERVER CAPABILITIES (raw) ===")
+	w.Log("%s", string(response.Result))
+	w.Log("=== END AL LSP SERVER CAPABILITIES ===")
+
 	w.initMu.Lock()
 	w.initialized = true
 	w.initMu.Unlock()
 
-	// Modify capabilities to advertise codeLensProvider (provided by al-call-hierarchy)
-	modifiedResult := w.addCodeLensCapability(response.Result)
+	// Modify capabilities to advertise extra capabilities (provided by al-call-hierarchy)
+	modifiedResult := w.addExtraCapabilities(response.Result)
 
 	// Return response to client
 	return &Message{
@@ -545,8 +652,8 @@ func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
 	}, nil
 }
 
-// addCodeLensCapability adds codeLensProvider to server capabilities
-func (w *ALLSPWrapper) addCodeLensCapability(result json.RawMessage) json.RawMessage {
+// addExtraCapabilities adds codeLensProvider and callHierarchyProvider to server capabilities
+func (w *ALLSPWrapper) addExtraCapabilities(result json.RawMessage) json.RawMessage {
 	if result == nil {
 		return result
 	}
@@ -564,12 +671,15 @@ func (w *ALLSPWrapper) addCodeLensCapability(result json.RawMessage) json.RawMes
 		return result
 	}
 
-	// Add codeLensProvider capability
+	// Add codeLensProvider capability (provided by al-call-hierarchy)
 	caps["codeLensProvider"] = map[string]interface{}{
 		"resolveProvider": false,
 	}
 
-	w.Log("Added codeLensProvider capability to server capabilities")
+	// Add callHierarchyProvider capability (provided by al-call-hierarchy)
+	caps["callHierarchyProvider"] = true
+
+	w.Log("Added codeLensProvider and callHierarchyProvider capabilities to server capabilities")
 
 	modifiedResult, err := json.Marshal(initResult)
 	if err != nil {
@@ -629,6 +739,24 @@ func (w *ALLSPWrapper) SendNotificationToLSP(method string, params interface{}) 
 	return WriteMessage(w.stdin, msg)
 }
 
+// GetManifest returns the cached manifest for a project root, or parses app.json fresh
+func (w *ALLSPWrapper) GetManifest(projectRoot string) *AppManifest {
+	if m, ok := w.projectManifests[projectRoot]; ok {
+		return m
+	}
+
+	appJsonPath := filepath.Join(projectRoot, "app.json")
+	manifest := ParseAppManifest(appJsonPath)
+	if manifest != nil {
+		depCount := len(manifest.Dependencies)
+		w.Log("Parsed app.json for %s: %d dependencies", projectRoot, depCount)
+		w.projectManifests[projectRoot] = manifest
+	} else {
+		w.Log("Could not parse app.json for %s", projectRoot)
+	}
+	return manifest
+}
+
 // EnsureFileOpened ensures a file is opened in the AL LSP
 func (w *ALLSPWrapper) EnsureFileOpened(filePath string) error {
 	normalizedPath := NormalizePath(filePath)
@@ -671,8 +799,11 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 
 	w.Log("Initializing project: %s", normalizedRoot)
 
+	// Parse app.json manifest
+	manifest := w.GetManifest(normalizedRoot)
+
 	// Send workspace configuration
-	settings := NewWorkspaceSettings(normalizedRoot)
+	settings := NewWorkspaceSettings(normalizedRoot, manifest)
 	configParams := DidChangeConfigurationParams{Settings: settings}
 	if err := w.SendNotificationToLSP("workspace/didChangeConfiguration", configParams); err != nil {
 		w.Log("Failed to send workspace configuration: %v", err)
@@ -685,14 +816,27 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 		// Continue anyway - app.json might not exist
 	}
 
+	// Send al/loadManifest (like VS Code does)
+	if manifest != nil && manifest.Raw != "" {
+		loadParams := LoadManifestParams{
+			ProjectFolder: normalizedRoot,
+			Manifest:      manifest.Raw,
+		}
+		if _, err := w.SendRequestToLSP("al/loadManifest", loadParams); err != nil {
+			w.Log("al/loadManifest failed (non-fatal): %v", err)
+		} else {
+			w.Log("al/loadManifest succeeded")
+		}
+	}
+
 	// Set active workspace
-	activeParams := NewActiveWorkspaceParams(normalizedRoot)
+	activeParams := NewActiveWorkspaceParams(normalizedRoot, manifest)
 	if _, err := w.SendRequestToLSP("al/setActiveWorkspace", activeParams); err != nil {
 		w.Log("Failed to set active workspace: %v", err)
 	}
 
 	// Wait for project to load
-	w.waitForProjectLoad()
+	w.waitForProjectLoad(normalizedRoot)
 
 	w.initializedProjects[normalizedRoot] = true
 	w.Log("Project initialized: %s", normalizedRoot)
@@ -700,22 +844,33 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 	return nil
 }
 
-func (w *ALLSPWrapper) waitForProjectLoad() {
-	// Poll for project load status
-	for i := 0; i < 10; i++ {
-		resp, err := w.SendRequestToLSP("al/hasProjectClosureLoadedRequest", nil)
+func (w *ALLSPWrapper) waitForProjectLoad(workspacePath string) {
+	params := map[string]string{
+		"workspacePath": workspacePath,
+	}
+
+	// Poll for project load status (up to 30 seconds)
+	for i := 0; i < 30; i++ {
+		resp, err := w.SendRequestToLSP("al/hasProjectClosureLoadedRequest", params)
 		if err != nil {
 			w.Log("Error checking project load status: %v", err)
 			break
 		}
 
-		var loaded bool
-		if err := json.Unmarshal(resp.Result, &loaded); err == nil && loaded {
+		// Response is { loaded: boolean }
+		var result struct {
+			Loaded bool `json:"loaded"`
+		}
+		if err := json.Unmarshal(resp.Result, &result); err != nil {
+			w.Log("Failed to parse project load response: %v (raw: %s)", err, string(resp.Result))
+			break
+		}
+		if result.Loaded {
 			w.Log("Project loaded successfully")
 			return
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(time.Second)
 	}
 
 	w.Log("Timeout waiting for project load, continuing anyway")
