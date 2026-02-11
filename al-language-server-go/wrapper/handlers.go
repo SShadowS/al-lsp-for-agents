@@ -2,6 +2,7 @@ package wrapper
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -38,6 +39,60 @@ type ALSymbolSearchParams struct {
 	Filter string `json:"filter"`
 }
 
+// ALSymbolSearchResponse represents the al/symbolSearch response format
+type ALSymbolSearchResponse struct {
+	Symbols   []ALSymbol `json:"symbols"`
+	Truncated bool       `json:"truncated"`
+}
+
+// ALSymbol represents a symbol from al/symbolSearch
+type ALSymbol struct {
+	Name          string `json:"name"`
+	FullName      string `json:"fullName"`
+	Kind          string `json:"kind"`
+	ContainerName string `json:"containerName"`
+	Signature     string `json:"signature"`
+	Path          string `json:"path"`
+}
+
+// alKindToLSPKind converts AL symbol kind strings to LSP SymbolKind numbers
+func alKindToLSPKind(kind string) int {
+	switch kind {
+	case "Table", "TableExtension":
+		return 5 // Class
+	case "Page", "PageExtension", "PageCustomization":
+		return 5 // Class
+	case "Codeunit":
+		return 5 // Class
+	case "Report", "ReportExtension":
+		return 5 // Class
+	case "Query":
+		return 5 // Class
+	case "XmlPort":
+		return 5 // Class
+	case "Enum", "EnumExtension":
+		return 10 // Enum
+	case "Interface":
+		return 11 // Interface
+	case "PermissionSet", "PermissionSetExtension":
+		return 5 // Class
+	case "Profile":
+		return 5 // Class
+	case "Entitlement":
+		return 5 // Class
+	case "Method", "Procedure", "Trigger":
+		return 6 // Method
+	case "Field":
+		return 8 // Field
+	case "Variable":
+		return 13 // Variable
+	case "EnumValue":
+		return 22 // EnumMember
+	default:
+		return 5 // Class as default
+	}
+}
+
 // Location represents an LSP location
 type Location struct {
 	URI   string `json:"uri"`
@@ -72,9 +127,10 @@ type DocumentSymbol struct {
 
 // SymbolInformation represents an LSP symbol information (flat format)
 type SymbolInformation struct {
-	Name     string   `json:"name"`
-	Kind     int      `json:"kind"`
-	Location Location `json:"location"`
+	Name          string   `json:"name"`
+	Kind          int      `json:"kind"`
+	Location      Location `json:"location"`
+	ContainerName string   `json:"containerName,omitempty"`
 }
 
 // Handler interface for method handlers
@@ -370,10 +426,12 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 		}, nil
 	}
 
+	normalized := normalizeHoverResult(response.Result)
+
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
-		Result:  normalizeHoverResult(response.Result),
+		Result:  normalized,
 	}, nil
 }
 
@@ -394,12 +452,27 @@ func normalizeHoverResult(result json.RawMessage) json.RawMessage {
 		return result // Can't parse, return as-is
 	}
 	if hover.Contents == nil || string(hover.Contents) == "null" {
-		return result
+		return json.RawMessage("null") // Return null hover, not a hover with null contents
 	}
 
 	normalized := normalizeContents(hover.Contents)
 	if normalized == nil {
-		return result
+		// normalizeContents returns nil when content is already MarkupContent
+		// or when it can't recognize the format. Validate the original is safe.
+		var check struct {
+			Kind string `json:"kind"`
+		}
+		if err := json.Unmarshal(hover.Contents, &check); err == nil && check.Kind != "" {
+			return result // Already valid MarkupContent, safe to return original
+		}
+		// Unknown format — force to markdown to prevent Claude Code crash
+		var raw interface{}
+		if err := json.Unmarshal(hover.Contents, &raw); err == nil {
+			str := fmt.Sprintf("%v", raw)
+			normalized = makeMarkupContent(str)
+		} else {
+			return json.RawMessage("null")
+		}
 	}
 
 	// Rebuild the hover object with normalized contents
@@ -579,28 +652,10 @@ func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 		w.Log("Extracted symbol from path: %s", query)
 	}
 
-	// First try standard workspace/symbol
-	response, err := w.SendRequestToLSP("workspace/symbol", WorkspaceSymbolParams{Query: query})
-	if err != nil {
-		w.Log("Failed to send workspace/symbol request: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
-	}
-
-	// Check if we got results
-	if response.Result != nil {
-		var results []interface{}
-		if err := json.Unmarshal(response.Result, &results); err == nil && len(results) > 0 {
-			return &Message{
-				JSONRPC: "2.0",
-				ID:      msg.ID,
-				Result:  response.Result,
-			}, nil
-		}
-	}
-
-	// Fallback to al/symbolSearch
-	w.Log("Falling back to al/symbolSearch for query: %s", query)
-	response, err = w.SendRequestToLSP("al/symbolSearch", ALSymbolSearchParams{Filter: query})
+	// Use al/symbolSearch exclusively - workspace/symbol deadlocks the AL LSP
+	// Confirmed: deadlock persists even with proper server request handling
+	w.Log("Sending al/symbolSearch for query: %s", query)
+	response, err := w.SendRequestToLSP("al/symbolSearch", ALSymbolSearchParams{Filter: query})
 	if err != nil {
 		w.Log("Failed to send al/symbolSearch request: %v", err)
 		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
@@ -614,10 +669,53 @@ func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 		}
 	}
 
+	// Convert al/symbolSearch response to standard LSP SymbolInformation[]
+	var searchResult ALSymbolSearchResponse
+	if err := json.Unmarshal(response.Result, &searchResult); err != nil {
+		w.Log("Failed to parse al/symbolSearch response: %v", err)
+		// Return raw result as fallback
+		return &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  response.Result,
+		}, nil
+	}
+
+	symbols := make([]SymbolInformation, 0, len(searchResult.Symbols))
+	for _, s := range searchResult.Symbols {
+		uri := s.Path
+		if uri != "" {
+			uri = strings.ReplaceAll(uri, "\\", "/")
+			if !strings.HasPrefix(uri, "file://") {
+				if !strings.HasPrefix(uri, "/") {
+					uri = "/" + uri
+				}
+				uri = "file://" + uri
+			}
+		}
+		symbols = append(symbols, SymbolInformation{
+			Name:          s.Name,
+			Kind:          alKindToLSPKind(s.Kind),
+			ContainerName: s.ContainerName,
+			Location: Location{
+				URI:   uri,
+				Range: Range{Start: Position{Line: 0, Character: 0}, End: Position{Line: 0, Character: 0}},
+			},
+		})
+	}
+
+	w.Log("Converted %d al/symbolSearch results to SymbolInformation", len(symbols))
+
+	resultJSON, err := json.Marshal(symbols)
+	if err != nil {
+		w.Log("Failed to marshal symbols: %v", err)
+		return nil, NewErrorResponse(msg.ID, InternalError, "Failed to marshal results")
+	}
+
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
-		Result:  response.Result,
+		Result:  json.RawMessage(resultJSON),
 	}, nil
 }
 

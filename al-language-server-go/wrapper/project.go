@@ -144,12 +144,12 @@ type ALResourceConfigurationSettings struct {
 
 // NewWorkspaceSettings creates workspace settings for the given project root
 func NewWorkspaceSettings(projectRoot string, manifest *AppManifest) *WorkspaceSettings {
-	var refs []ProjectReferenceDefinition
-	if manifest != nil {
-		refs = manifest.ToProjectReferenceDefinitions()
-	} else {
-		refs = []ProjectReferenceDefinition{}
-	}
+	// Always send empty expectedProjectReferenceDefinitions. The AL LSP blocks
+	// project loading until ALL expected references are resolved. If .alpackages
+	// is missing or incomplete, this causes hasProjectClosureLoaded to return
+	// false forever. The AL LSP still discovers available packages via
+	// packageCachePaths, so dependency symbols are loaded when available.
+	refs := []ProjectReferenceDefinition{}
 
 	return &WorkspaceSettings{
 		WorkspacePath: projectRoot,

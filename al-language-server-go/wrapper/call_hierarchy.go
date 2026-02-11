@@ -295,6 +295,11 @@ func (s *CallHierarchyServer) Initialize(rootURI string, workspaceFolders []Work
 		return fmt.Errorf("initialize request failed: %w", err)
 	}
 
+	// Log al-call-hierarchy server capabilities
+	s.log("=== CALL HIERARCHY SERVER CAPABILITIES ===")
+	s.log("%s", string(response.Result))
+	s.log("=== END CALL HIERARCHY SERVER CAPABILITIES ===")
+
 	if response.Error != nil {
 		return fmt.Errorf("initialize error: %s", response.Error.Message)
 	}

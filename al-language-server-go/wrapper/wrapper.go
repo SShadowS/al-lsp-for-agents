@@ -60,6 +60,10 @@ type ALLSPWrapper struct {
 	// Call hierarchy server
 	callHierarchyServer *CallHierarchyServer
 
+	// Write mutex for AL LSP stdin (handleServerRequest and SendRequestToLSP
+	// can write concurrently from different goroutines)
+	stdinMu sync.Mutex
+
 	// Logging
 	logFile       *os.File
 	logMu         sync.Mutex
@@ -375,7 +379,7 @@ func (w *ALLSPWrapper) handleServerRequest(msg *Message) {
 			ID:      msg.ID,
 			Result:  json.RawMessage("null"),
 		}
-		if err := WriteMessage(w.stdin, resp); err != nil {
+		if err := w.writeToLSP(resp); err != nil {
 			w.Log("Error responding to %s: %v", msg.Method, err)
 		}
 
@@ -400,7 +404,7 @@ func (w *ALLSPWrapper) handleServerRequest(msg *Message) {
 			ID:      msg.ID,
 			Result:  resultJSON,
 		}
-		if err := WriteMessage(w.stdin, resp); err != nil {
+		if err := w.writeToLSP(resp); err != nil {
 			w.Log("Error responding to workspace/configuration: %v", err)
 		}
 
@@ -438,7 +442,7 @@ func (w *ALLSPWrapper) handleServerRequest(msg *Message) {
 			ID:      msg.ID,
 			Result:  json.RawMessage("null"),
 		}
-		if err := WriteMessage(w.stdin, resp); err != nil {
+		if err := w.writeToLSP(resp); err != nil {
 			w.Log("Error responding to %s: %v", msg.Method, err)
 		}
 
@@ -450,7 +454,7 @@ func (w *ALLSPWrapper) handleServerRequest(msg *Message) {
 			ID:      msg.ID,
 			Result:  json.RawMessage("null"),
 		}
-		if err := WriteMessage(w.stdin, resp); err != nil {
+		if err := w.writeToLSP(resp); err != nil {
 			w.Log("Error responding to %s: %v", msg.Method, err)
 		}
 	}
@@ -690,8 +694,13 @@ func (w *ALLSPWrapper) addExtraCapabilities(result json.RawMessage) json.RawMess
 	return modifiedResult
 }
 
-// SendRequestToLSP sends a request to the AL LSP and waits for response
+// SendRequestToLSP sends a request to the AL LSP and waits for response (30s timeout)
 func (w *ALLSPWrapper) SendRequestToLSP(method string, params interface{}) (*Message, error) {
+	return w.SendRequestToLSPWithTimeout(method, params, 30*time.Second)
+}
+
+// SendRequestToLSPWithTimeout sends a request to the AL LSP with a custom timeout
+func (w *ALLSPWrapper) SendRequestToLSPWithTimeout(method string, params interface{}, timeout time.Duration) (*Message, error) {
 	w.requestID++
 	id := w.requestID
 
@@ -708,7 +717,7 @@ func (w *ALLSPWrapper) SendRequestToLSP(method string, params interface{}) (*Mes
 
 	// Send request
 	w.Log("Sending request to AL LSP: method=%s id=%d", method, id)
-	if err := WriteMessage(w.stdin, msg); err != nil {
+	if err := w.writeToLSP(msg); err != nil {
 		w.pendingMu.Lock()
 		delete(w.pendingReqs, id)
 		w.pendingMu.Unlock()
@@ -720,11 +729,11 @@ func (w *ALLSPWrapper) SendRequestToLSP(method string, params interface{}) (*Mes
 	case resp := <-respChan:
 		w.Log("Received response from AL LSP: id=%d", id)
 		return resp, nil
-	case <-time.After(30 * time.Second):
+	case <-time.After(timeout):
 		w.pendingMu.Lock()
 		delete(w.pendingReqs, id)
 		w.pendingMu.Unlock()
-		return nil, fmt.Errorf("timeout waiting for response to %s", method)
+		return nil, fmt.Errorf("timeout waiting for response to %s (after %v)", method, timeout)
 	}
 }
 
@@ -736,6 +745,15 @@ func (w *ALLSPWrapper) SendNotificationToLSP(method string, params interface{}) 
 	}
 
 	w.Log("Sending notification to AL LSP: %s", method)
+	return w.writeToLSP(msg)
+}
+
+// writeToLSP writes a message to the AL LSP stdin with mutex protection.
+// This is needed because handleServerRequest (readFromLSP goroutine) and
+// SendRequestToLSP (readFromClient goroutine) can write concurrently.
+func (w *ALLSPWrapper) writeToLSP(msg *Message) error {
+	w.stdinMu.Lock()
+	defer w.stdinMu.Unlock()
 	return WriteMessage(w.stdin, msg)
 }
 
@@ -816,22 +834,22 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 		// Continue anyway - app.json might not exist
 	}
 
-	// Send al/loadManifest (like VS Code does)
+	// Send al/loadManifest (like VS Code does) — use longer timeout for large projects
 	if manifest != nil && manifest.Raw != "" {
 		loadParams := LoadManifestParams{
 			ProjectFolder: normalizedRoot,
 			Manifest:      manifest.Raw,
 		}
-		if _, err := w.SendRequestToLSP("al/loadManifest", loadParams); err != nil {
+		if _, err := w.SendRequestToLSPWithTimeout("al/loadManifest", loadParams, 60*time.Second); err != nil {
 			w.Log("al/loadManifest failed (non-fatal): %v", err)
 		} else {
 			w.Log("al/loadManifest succeeded")
 		}
 	}
 
-	// Set active workspace
+	// Set active workspace — use longer timeout for large projects
 	activeParams := NewActiveWorkspaceParams(normalizedRoot, manifest)
-	if _, err := w.SendRequestToLSP("al/setActiveWorkspace", activeParams); err != nil {
+	if _, err := w.SendRequestToLSPWithTimeout("al/setActiveWorkspace", activeParams, 60*time.Second); err != nil {
 		w.Log("Failed to set active workspace: %v", err)
 	}
 
@@ -849,9 +867,9 @@ func (w *ALLSPWrapper) waitForProjectLoad(workspacePath string) {
 		"workspacePath": workspacePath,
 	}
 
-	// Poll for project load status (up to 30 seconds)
-	for i := 0; i < 30; i++ {
-		resp, err := w.SendRequestToLSP("al/hasProjectClosureLoadedRequest", params)
+	// Poll for project load status (up to 2 minutes)
+	for i := 0; i < 120; i++ {
+		resp, err := w.SendRequestToLSPWithTimeout("al/hasProjectClosureLoadedRequest", params, 60*time.Second)
 		if err != nil {
 			w.Log("Error checking project load status: %v", err)
 			break
@@ -866,14 +884,17 @@ func (w *ALLSPWrapper) waitForProjectLoad(workspacePath string) {
 			break
 		}
 		if result.Loaded {
-			w.Log("Project loaded successfully")
+			w.Log("Project loaded successfully (after %d polls)", i+1)
 			return
 		}
 
+		if (i+1)%10 == 0 {
+			w.Log("Still waiting for project load... (%d seconds)", i+1)
+		}
 		time.Sleep(time.Second)
 	}
 
-	w.Log("Timeout waiting for project load, continuing anyway")
+	w.Log("Timeout waiting for project load (2 minutes), continuing anyway")
 }
 
 // GetCallHierarchyServer returns the call hierarchy server

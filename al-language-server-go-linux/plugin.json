@@ -1,6 +1,6 @@
 {
   "name": "al-language-server-go-linux",
-  "version": "1.4.7",
+  "version": "1.4.8",
   "description": "AL language server wrapper (Go) for Linux - includes Code Lens, Call Hierarchy, and unused procedure detection",
   "author": {
     "name": "SShadowS"
