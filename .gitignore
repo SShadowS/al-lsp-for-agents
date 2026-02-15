@@ -22,3 +22,12 @@ CLAUDE.md
 
 # Dev marketplace (local testing only)
 .claude-plugin-dev/
+
+# Test runner config
+.altestrunner/
+
+# Debug notes
+DEBUG.md
+
+# Serena project config (local)
+test-al-project/.serena/
