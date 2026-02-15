@@ -1,44 +1,58 @@
 {
   "_meta": {
     "description": "Claude Code LSP client capabilities baseline",
-    "captured_from": "Claude Code CLI",
-    "last_updated": "2026-02-05",
+    "captured_from": "Log file: C:/Users/SShadowS/AppData/Local/Temp/al-lsp-wrapper-go-112616.log",
+    "last_updated": "2026-02-15",
     "notes": "This file tracks the LSP capabilities that Claude Code sends during initialize. Update when capabilities change."
   },
   "workspace": {
-    "workspaceEdit": {},
-    "didChangeConfiguration": {},
-    "didChangeWatchedFiles": {},
-    "symbol": {},
-    "executeCommand": {}
+    "configuration": false,
+    "workspaceFolders": false
   },
   "textDocument": {
     "synchronization": {
+      "dynamicRegistration": false,
+      "willSave": false,
+      "willSaveWaitUntil": false,
       "didSave": true
     },
-    "completion": {
-      "completionItem": {}
-    },
-    "hover": {},
-    "signatureHelp": {},
-    "definition": {},
-    "references": {},
-    "documentHighlight": {},
-    "documentSymbol": {},
-    "codeAction": {},
-    "codeLens": {},
-    "formatting": {},
-    "rangeFormatting": {},
-    "onTypeFormatting": {},
-    "rename": {},
-    "documentLink": {},
     "publishDiagnostics": {
-      "relatedInformation": true
+      "relatedInformation": true,
+      "tagSupport": {
+        "valueSet": [
+          1,
+          2
+        ]
+      },
+      "versionSupport": false,
+      "codeDescriptionSupport": true,
+      "dataSupport": false
+    },
+    "hover": {
+      "dynamicRegistration": false,
+      "contentFormat": [
+        "markdown",
+        "plaintext"
+      ]
+    },
+    "definition": {
+      "dynamicRegistration": false,
+      "linkSupport": true
+    },
+    "references": {
+      "dynamicRegistration": false
+    },
+    "documentSymbol": {
+      "dynamicRegistration": false,
+      "hierarchicalDocumentSymbolSupport": true
+    },
+    "callHierarchy": {
+      "dynamicRegistration": false
     }
   },
-  "window": {
-    "showMessage": {
-      "messageActionItem": {}
-    }
+  "general": {
+    "positionEncodings": [
+      "utf-16"
+    ]
   }
 }
