@@ -71,8 +71,9 @@ def extract_capabilities_from_log(log_path: str) -> Optional[Dict[str, Any]]:
     """
     Extract client capabilities from a wrapper log file.
 
-    Looks for the "=== CLIENT CAPABILITIES (parsed) ===" marker and extracts
-    the JSON block that follows.
+    Looks for the "=== CLIENT INITIALIZE PARAMS (raw) ===" marker and extracts
+    the capabilities field from the raw JSON initialize params. This gives us
+    the ground truth of what Claude Code actually sends, not our parsed version.
     """
     if not os.path.exists(log_path):
         print(f"ERROR: Log file not found: {log_path}")
@@ -81,19 +82,19 @@ def extract_capabilities_from_log(log_path: str) -> Optional[Dict[str, Any]]:
     with open(log_path, "r", encoding="utf-8", errors="replace") as f:
         content = f.read()
 
-    # Look for the capabilities marker (use rfind to get the LAST occurrence)
-    start_marker = "=== CLIENT CAPABILITIES (parsed) ==="
-    end_marker = "=== END CLIENT CAPABILITIES ==="
+    # Look for the raw initialize params marker (use rfind to get the LAST occurrence)
+    start_marker = "=== CLIENT INITIALIZE PARAMS (raw) ==="
+    end_marker = "=== END CLIENT INITIALIZE PARAMS ==="
 
     start_idx = content.rfind(start_marker)
     if start_idx == -1:
-        print("ERROR: Could not find CLIENT CAPABILITIES marker in log")
+        print("ERROR: Could not find CLIENT INITIALIZE PARAMS marker in log")
         print("Make sure the log contains an initialize request with capabilities.")
         return None
 
     end_idx = content.find(end_marker, start_idx)
     if end_idx == -1:
-        print("ERROR: Could not find END CLIENT CAPABILITIES marker in log")
+        print("ERROR: Could not find END CLIENT INITIALIZE PARAMS marker in log")
         return None
 
     # Extract the JSON between markers
@@ -108,21 +109,28 @@ def extract_capabilities_from_log(log_path: str) -> Optional[Dict[str, Any]]:
         # The timestamp may or may not have content after it
         match = re.match(r"^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\]\s*(.*)$", line)
         if match:
-            content = match.group(1)
-            if content:  # Only add non-empty lines
-                cleaned_lines.append(content)
+            line_content = match.group(1)
+            if line_content:  # Only add non-empty lines
+                cleaned_lines.append(line_content)
         elif line.strip():  # Non-timestamped, non-empty line
             cleaned_lines.append(line)
 
     json_text = "\n".join(cleaned_lines)
 
     try:
-        return json.loads(json_text)
+        init_params = json.loads(json_text)
     except json.JSONDecodeError as e:
-        print(f"ERROR: Failed to parse capabilities JSON: {e}")
+        print(f"ERROR: Failed to parse initialize params JSON: {e}")
         print("Raw extracted text:")
         print(json_text[:500] + "..." if len(json_text) > 500 else json_text)
         return None
+
+    # Extract just the capabilities field
+    if "capabilities" not in init_params:
+        print("ERROR: No 'capabilities' field found in initialize params")
+        return None
+
+    return init_params["capabilities"]
 
 
 def get_test_client_capabilities() -> Dict[str, Any]:
