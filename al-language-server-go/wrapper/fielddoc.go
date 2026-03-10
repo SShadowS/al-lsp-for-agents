@@ -97,6 +97,19 @@ func resolveDefinitionURI(w WrapperInterface, params TextDocumentPositionParams)
 	return PathToFileURI(defPath)
 }
 
+// symbolPropertiesResponse is the generic response from al-call-hierarchy property endpoints.
+// Properties are returned as key-value pairs rather than a typed struct, so we never
+// miss properties that tree-sitter can extract.
+type symbolPropertiesResponse struct {
+	FieldID    *uint32         `json:"field_id,omitempty"`
+	Properties []propertyEntry `json:"properties"`
+}
+
+type propertyEntry struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 // enrichFieldFromFile queries al-call-hierarchy for field properties and appends to hover
 func enrichFieldFromFile(w WrapperInterface, chServer *CallHierarchyServer, hoverResult json.RawMessage, uri string, fieldName string) json.RawMessage {
 	w.Log("Requesting field properties for %s in %s", fieldName, uri)
@@ -117,15 +130,7 @@ func enrichFieldFromFile(w WrapperInterface, chServer *CallHierarchyServer, hove
 		return hoverResult
 	}
 
-	var props struct {
-		FieldID            *uint32 `json:"fieldId,omitempty"`
-		Caption            *string `json:"caption,omitempty"`
-		FieldClass         *string `json:"fieldClass,omitempty"`
-		CalcFormula        *string `json:"calcFormula,omitempty"`
-		TableRelation      *string `json:"tableRelation,omitempty"`
-		Editable           *string `json:"editable,omitempty"`
-		DataClassification *string `json:"dataClassification,omitempty"`
-	}
+	var props symbolPropertiesResponse
 	if err := json.Unmarshal(resp.Result, &props); err != nil {
 		w.Log("Failed to parse field properties: %v", err)
 		return hoverResult
@@ -135,23 +140,8 @@ func enrichFieldFromFile(w WrapperInterface, chServer *CallHierarchyServer, hove
 	if props.FieldID != nil {
 		parts = append(parts, formatProp("Field ID", uintToStr(*props.FieldID)))
 	}
-	if props.Caption != nil {
-		parts = append(parts, formatProp("Caption", *props.Caption))
-	}
-	if props.FieldClass != nil {
-		parts = append(parts, formatProp("FieldClass", *props.FieldClass))
-	}
-	if props.CalcFormula != nil {
-		parts = append(parts, formatProp("CalcFormula", *props.CalcFormula))
-	}
-	if props.TableRelation != nil {
-		parts = append(parts, formatProp("TableRelation", *props.TableRelation))
-	}
-	if props.Editable != nil {
-		parts = append(parts, formatProp("Editable", *props.Editable))
-	}
-	if props.DataClassification != nil {
-		parts = append(parts, formatProp("DataClassification", *props.DataClassification))
+	for _, p := range props.Properties {
+		parts = append(parts, formatProp(p.Name, p.Value))
 	}
 
 	if len(parts) == 0 {
@@ -182,77 +172,19 @@ func enrichActionFromFile(w WrapperInterface, chServer *CallHierarchyServer, hov
 		return hoverResult
 	}
 
-	var props struct {
-		Caption          *string `json:"caption,omitempty"`
-		Image            *string `json:"image,omitempty"`
-		RunObject        *string `json:"runObject,omitempty"`
-		RunPageLink      *string `json:"runPageLink,omitempty"`
-		RunPageMode      *string `json:"runPageMode,omitempty"`
-		RunPageView      *string `json:"runPageView,omitempty"`
-		Tooltip          *string `json:"tooltip,omitempty"`
-		Promoted         *string `json:"promoted,omitempty"`
-		PromotedCategory *string `json:"promotedCategory,omitempty"`
-		ShortcutKey      *string `json:"shortcutKey,omitempty"`
-		Scope            *string `json:"scope,omitempty"`
-		Enabled          *string `json:"enabled,omitempty"`
-		Visible          *string `json:"visible,omitempty"`
-	}
+	var props symbolPropertiesResponse
 	if err := json.Unmarshal(resp.Result, &props); err != nil {
 		w.Log("Failed to parse action properties: %v", err)
 		return hoverResult
 	}
 
-	// Check if we actually got any properties (empty result = not an action)
-	hasProps := props.Caption != nil || props.RunObject != nil || props.Image != nil ||
-		props.Tooltip != nil || props.Promoted != nil || props.ShortcutKey != nil
-
-	if !hasProps {
+	if len(props.Properties) == 0 {
 		return hoverResult
 	}
 
 	var parts []string
-	if props.Caption != nil {
-		parts = append(parts, formatProp("Caption", *props.Caption))
-	}
-	if props.RunObject != nil {
-		parts = append(parts, formatProp("RunObject", *props.RunObject))
-	}
-	if props.RunPageLink != nil {
-		parts = append(parts, formatProp("RunPageLink", *props.RunPageLink))
-	}
-	if props.RunPageMode != nil {
-		parts = append(parts, formatProp("RunPageMode", *props.RunPageMode))
-	}
-	if props.RunPageView != nil {
-		parts = append(parts, formatProp("RunPageView", *props.RunPageView))
-	}
-	if props.Image != nil {
-		parts = append(parts, formatProp("Image", *props.Image))
-	}
-	if props.Tooltip != nil {
-		parts = append(parts, formatProp("ToolTip", *props.Tooltip))
-	}
-	if props.ShortcutKey != nil {
-		parts = append(parts, formatProp("ShortcutKey", *props.ShortcutKey))
-	}
-	if props.Promoted != nil {
-		parts = append(parts, formatProp("Promoted", *props.Promoted))
-	}
-	if props.PromotedCategory != nil {
-		parts = append(parts, formatProp("PromotedCategory", *props.PromotedCategory))
-	}
-	if props.Scope != nil {
-		parts = append(parts, formatProp("Scope", *props.Scope))
-	}
-	if props.Enabled != nil {
-		parts = append(parts, formatProp("Enabled", *props.Enabled))
-	}
-	if props.Visible != nil {
-		parts = append(parts, formatProp("Visible", *props.Visible))
-	}
-
-	if len(parts) == 0 {
-		return hoverResult
+	for _, p := range props.Properties {
+		parts = append(parts, formatProp(p.Name, p.Value))
 	}
 
 	extra := "\n\n--- Action Properties ---\n" + strings.Join(parts, "\n")
