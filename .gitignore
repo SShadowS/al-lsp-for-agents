@@ -35,10 +35,7 @@ test-al-project/.serena/
 # Node modules
 node_modules/
 
-# Built binaries (built from source, downloaded by CI)
-al-language-server-go/bin/
-al-language-server-go-windows/bin/
-al-language-server-go-linux/bin/
+# VS Code extension binaries (built from source)
 vscode-extension/bin/
 
 # Superpowers planning docs (local)
