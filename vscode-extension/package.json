@@ -2,7 +2,7 @@
   "name": "al-lsp-for-agents",
   "displayName": "AL LSP for Agents",
   "description": "Code navigation, call hierarchy, and code quality diagnostics for AL (Business Central) — works with GitHub Copilot agent mode",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "publisher": "SShadowSdk",
   "license": "MIT",
   "preview": true,
@@ -291,9 +291,11 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run package",
+    "compile": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "node esbuild.mjs --production",
+    "compile:tsc": "tsc -p ./ --noEmit",
     "lint": "eslint src --ext ts"
   },
   "dependencies": {
@@ -303,6 +305,7 @@
     "@types/node": "^25.4.0",
     "@types/vscode": "^1.99.0",
     "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.5.0"
   }
 }
