@@ -687,7 +687,16 @@ func (w *ALLSPWrapper) addExtraCapabilities(result json.RawMessage) json.RawMess
 	// Add callHierarchyProvider capability (provided by al-call-hierarchy)
 	caps["callHierarchyProvider"] = true
 
-	w.Log("Added codeLensProvider and callHierarchyProvider capabilities to server capabilities")
+	// Remove executeCommandProvider to avoid "al/runCodeAction already exists" conflict
+	// when running alongside the MS AL extension in VS Code
+	delete(caps, "executeCommandProvider")
+
+	// Remove semanticTokensProvider — the MS AL LSP's implementation crashes with
+	// NullReferenceException, causing 30s timeouts. The MS AL extension handles
+	// semantic tokens directly when present.
+	delete(caps, "semanticTokensProvider")
+
+	w.Log("Modified server capabilities: added codeLens+callHierarchy, removed executeCommand+semanticTokens")
 
 	modifiedResult, err := json.Marshal(initResult)
 	if err != nil {

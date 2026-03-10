@@ -41,6 +41,39 @@ export async function activate(context: vscode.ExtensionContext) {
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher("**/*.al"),
     },
+    // Suppress all VS Code provider registrations — the MS AL extension
+    // already provides these for the editor. We only use client.sendRequest()
+    // for our Language Model Tools, so we don't need duplicate providers.
+    middleware: {
+      provideCompletionItem: () => undefined,
+      provideHover: () => undefined,
+      provideSignatureHelp: () => undefined,
+      provideDefinition: () => undefined,
+      provideReferences: () => undefined,
+      provideDocumentHighlights: () => undefined,
+      provideDocumentSymbols: () => undefined,
+      provideWorkspaceSymbols: () => undefined,
+      provideCodeActions: () => undefined,
+      provideCodeLenses: () => undefined,
+      resolveCodeLens: () => undefined,
+      provideDocumentFormattingEdits: () => undefined,
+      provideDocumentRangeFormattingEdits: () => undefined,
+      provideOnTypeFormattingEdits: () => undefined,
+      provideRenameEdits: () => undefined,
+      provideDocumentLinks: () => undefined,
+      provideFoldingRanges: () => undefined,
+      provideSelectionRanges: () => undefined,
+      provideDocumentSemanticTokens: () => undefined,
+      provideDocumentRangeSemanticTokens: () => undefined,
+      provideImplementation: () => undefined,
+      provideTypeDefinition: () => undefined,
+      provideDeclaration: () => undefined,
+      provideInlayHints: () => undefined,
+      provideInlineValues: () => undefined,
+      prepareCallHierarchy: () => undefined,
+      provideCallHierarchyIncomingCalls: () => undefined,
+      provideCallHierarchyOutgoingCalls: () => undefined,
+    },
   };
 
   client = new LanguageClient(
@@ -52,7 +85,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register Language Model Tools for Copilot agent mode first —
   // tools should be available even if the LSP server is still starting
-  registerTools(context, client);
+  const log = vscode.window.createOutputChannel("AL LSP for Agents");
+  log.appendLine("Extension activating...");
+  log.appendLine(`vscode.lm available: ${!!vscode.lm}`);
+  log.appendLine(`vscode.lm.registerTool available: ${!!vscode.lm?.registerTool}`);
+  try {
+    registerTools(context, client);
+    log.appendLine("Tools registered successfully");
+  } catch (err) {
+    log.appendLine(`Tool registration failed: ${err}`);
+    vscode.window.showErrorMessage(`AL LSP for Agents: Tool registration failed: ${err}`);
+  }
 
   try {
     await client.start();
