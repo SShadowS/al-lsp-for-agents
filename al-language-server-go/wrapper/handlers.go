@@ -428,10 +428,13 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 
 	normalized := normalizeHoverResult(response.Result)
 
+	// Enrich with full XML doc comments (params, returns, remarks, etc.)
+	enriched := enrichHoverWithXmlDoc(w, normalized, params)
+
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
-		Result:  normalized,
+		Result:  enriched,
 	}, nil
 }
 
