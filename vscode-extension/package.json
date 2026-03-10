@@ -32,6 +32,7 @@
     "languageModelTools": [
       {
         "name": "al_goToDefinition",
+        "displayName": "AL Go To Definition",
         "tags": [
           "al",
           "navigation",
@@ -63,6 +64,7 @@
       },
       {
         "name": "al_hover",
+        "displayName": "AL Hover",
         "tags": [
           "al",
           "type-info",
@@ -94,6 +96,7 @@
       },
       {
         "name": "al_findReferences",
+        "displayName": "AL Find References",
         "tags": [
           "al",
           "references",
@@ -125,6 +128,7 @@
       },
       {
         "name": "al_prepareCallHierarchy",
+        "displayName": "AL Prepare Call Hierarchy",
         "tags": [
           "al",
           "call-hierarchy"
@@ -155,6 +159,7 @@
       },
       {
         "name": "al_incomingCalls",
+        "displayName": "AL Incoming Calls",
         "tags": [
           "al",
           "call-hierarchy",
@@ -186,6 +191,7 @@
       },
       {
         "name": "al_outgoingCalls",
+        "displayName": "AL Outgoing Calls",
         "tags": [
           "al",
           "call-hierarchy",
@@ -217,6 +223,7 @@
       },
       {
         "name": "al_codeLens",
+        "displayName": "AL Code Lens",
         "tags": [
           "al",
           "code-lens",
@@ -238,6 +245,7 @@
       },
       {
         "name": "al_codeQualityDiagnostics",
+        "displayName": "AL Code Quality Diagnostics",
         "tags": [
           "al",
           "diagnostics",
