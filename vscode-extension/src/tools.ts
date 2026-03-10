@@ -125,15 +125,116 @@ class HoverTool implements vscode.LanguageModelTool<PositionInput> {
       ]);
     }
 
-    const content =
+    const hoverContent =
       typeof hover.contents === "string"
         ? hover.contents
         : hover.contents.value;
 
+    // Try to enrich with full XML doc comments from the source
+    const xmlDoc = await this.getXmlDoc(uri, line, character);
+    const result = xmlDoc
+      ? `${hoverContent}\n\n--- Documentation ---\n${xmlDoc}`
+      : hoverContent;
+
     return new vscode.LanguageModelToolResult([
-      new vscode.LanguageModelTextPart(content),
+      new vscode.LanguageModelTextPart(result),
     ]);
   }
+
+  private async getXmlDoc(
+    uri: string,
+    line: number,
+    character: number
+  ): Promise<string | null> {
+    try {
+      // Go to definition to find the source location
+      const locations = await this.client.sendRequest<
+        { uri: string; range: Range }[] | { uri: string; range: Range } | null
+      >("textDocument/definition", {
+        textDocument: { uri },
+        position: { line, character },
+      });
+
+      if (!locations) return null;
+
+      const loc = Array.isArray(locations) ? locations[0] : locations;
+      if (!loc) return null;
+
+      // Read the source file
+      const docUri = vscode.Uri.parse(loc.uri);
+      let doc: vscode.TextDocument;
+      try {
+        doc = await vscode.workspace.openTextDocument(docUri);
+      } catch {
+        return null;
+      }
+
+      // Walk backwards from the definition line collecting /// lines
+      const defLine = loc.range.start.line;
+      const commentLines: string[] = [];
+      for (let i = defLine - 1; i >= 0; i--) {
+        const text = doc.lineAt(i).text.trim();
+        if (text.startsWith("///")) {
+          commentLines.unshift(text.replace(/^\/\/\/\s?/, ""));
+        } else {
+          break;
+        }
+      }
+
+      if (commentLines.length === 0) return null;
+
+      return parseXmlDoc(commentLines.join("\n"));
+    } catch {
+      return null;
+    }
+  }
+}
+
+function parseXmlDoc(xml: string): string {
+  const parts: string[] = [];
+
+  // Extract <summary>
+  const summary = extractTag(xml, "summary");
+  if (summary) {
+    parts.push(summary.trim());
+  }
+
+  // Extract <param> tags
+  const paramRegex = /<param\s+name=["']([^"']+)["']>([\s\S]*?)<\/param>/g;
+  let match;
+  const params: string[] = [];
+  while ((match = paramRegex.exec(xml)) !== null) {
+    params.push(`- \`${match[1]}\`: ${match[2].trim()}`);
+  }
+  if (params.length > 0) {
+    parts.push(`**Parameters:**\n${params.join("\n")}`);
+  }
+
+  // Extract <returns>
+  const returns = extractTag(xml, "returns");
+  if (returns) {
+    parts.push(`**Returns:** ${returns.trim()}`);
+  }
+
+  // Extract <remarks>
+  const remarks = extractTag(xml, "remarks");
+  if (remarks) {
+    parts.push(`**Remarks:** ${remarks.trim()}`);
+  }
+
+  // Extract <example>
+  const example = extractTag(xml, "example");
+  if (example) {
+    parts.push(`**Example:** ${example.trim()}`);
+  }
+
+  return parts.join("\n\n");
+}
+
+function extractTag(xml: string, tag: string): string | null {
+  const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i");
+  const match = regex.exec(xml);
+  return match ? match[1] : null;
 }
 
 class FindReferencesTool implements vscode.LanguageModelTool<PositionInput> {
