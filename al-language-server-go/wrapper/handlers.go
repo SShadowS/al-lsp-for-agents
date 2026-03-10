@@ -434,6 +434,9 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 	// Enrich field hovers with properties (Caption, TableRelation, CalcFormula, etc.)
 	enriched = enrichFieldHover(w, enriched, params)
 
+	// Enrich action hovers with properties (RunObject, ToolTip, Image, etc.)
+	enriched = enrichActionHover(w, enriched, params)
+
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
