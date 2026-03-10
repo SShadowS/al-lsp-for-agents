@@ -32,108 +32,225 @@
     "languageModelTools": [
       {
         "name": "al_goToDefinition",
-        "tags": ["al", "navigation", "definition"],
+        "tags": [
+          "al",
+          "navigation",
+          "definition"
+        ],
         "modelDescription": "Navigate to where an AL symbol is defined. Use this when you need to find the source definition of a table, codeunit, procedure, field, enum, page, or any other AL object. Provide a file URI and position (line/character). Returns the file and location of the definition.",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "description": "File URI (file:///path/to/file.al)" },
-            "line": { "type": "number", "description": "Zero-based line number" },
-            "character": { "type": "number", "description": "Zero-based character offset" }
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            },
+            "line": {
+              "type": "number",
+              "description": "Zero-based line number"
+            },
+            "character": {
+              "type": "number",
+              "description": "Zero-based character offset"
+            }
           },
-          "required": ["uri", "line", "character"]
+          "required": [
+            "uri",
+            "line",
+            "character"
+          ]
         }
       },
       {
         "name": "al_hover",
-        "tags": ["al", "type-info", "hover"],
+        "tags": [
+          "al",
+          "type-info",
+          "hover"
+        ],
         "modelDescription": "Get type information, procedure signatures, and record field lists for an AL symbol. Use this to understand what type a variable is, what fields a record has, or what parameters a procedure takes. Provide a file URI and position.",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "description": "File URI (file:///path/to/file.al)" },
-            "line": { "type": "number", "description": "Zero-based line number" },
-            "character": { "type": "number", "description": "Zero-based character offset" }
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            },
+            "line": {
+              "type": "number",
+              "description": "Zero-based line number"
+            },
+            "character": {
+              "type": "number",
+              "description": "Zero-based character offset"
+            }
           },
-          "required": ["uri", "line", "character"]
+          "required": [
+            "uri",
+            "line",
+            "character"
+          ]
         }
       },
       {
         "name": "al_findReferences",
-        "tags": ["al", "references", "usages"],
+        "tags": [
+          "al",
+          "references",
+          "usages"
+        ],
         "modelDescription": "Find all usages of an AL symbol across the project. Returns every file and location where the symbol is referenced. Use this before renaming or modifying a symbol to understand impact.",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "description": "File URI (file:///path/to/file.al)" },
-            "line": { "type": "number", "description": "Zero-based line number" },
-            "character": { "type": "number", "description": "Zero-based character offset" }
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            },
+            "line": {
+              "type": "number",
+              "description": "Zero-based line number"
+            },
+            "character": {
+              "type": "number",
+              "description": "Zero-based character offset"
+            }
           },
-          "required": ["uri", "line", "character"]
+          "required": [
+            "uri",
+            "line",
+            "character"
+          ]
         }
       },
       {
         "name": "al_prepareCallHierarchy",
-        "tags": ["al", "call-hierarchy"],
+        "tags": [
+          "al",
+          "call-hierarchy"
+        ],
         "modelDescription": "Get a call hierarchy item at a cursor position in an AL file. Use this to identify a procedure for subsequent incoming/outgoing call analysis. Provide a file URI and position on a procedure name.",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "description": "File URI (file:///path/to/file.al)" },
-            "line": { "type": "number", "description": "Zero-based line number" },
-            "character": { "type": "number", "description": "Zero-based character offset" }
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            },
+            "line": {
+              "type": "number",
+              "description": "Zero-based line number"
+            },
+            "character": {
+              "type": "number",
+              "description": "Zero-based character offset"
+            }
           },
-          "required": ["uri", "line", "character"]
+          "required": [
+            "uri",
+            "line",
+            "character"
+          ]
         }
       },
       {
         "name": "al_incomingCalls",
-        "tags": ["al", "call-hierarchy", "callers"],
+        "tags": [
+          "al",
+          "call-hierarchy",
+          "callers"
+        ],
         "modelDescription": "Find all procedures that call a specific AL procedure (its callers). Provide a file URI and position on a procedure name. Returns a list of calling procedures with their locations.",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "description": "File URI (file:///path/to/file.al)" },
-            "line": { "type": "number", "description": "Zero-based line number" },
-            "character": { "type": "number", "description": "Zero-based character offset" }
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            },
+            "line": {
+              "type": "number",
+              "description": "Zero-based line number"
+            },
+            "character": {
+              "type": "number",
+              "description": "Zero-based character offset"
+            }
           },
-          "required": ["uri", "line", "character"]
+          "required": [
+            "uri",
+            "line",
+            "character"
+          ]
         }
       },
       {
         "name": "al_outgoingCalls",
-        "tags": ["al", "call-hierarchy", "callees"],
+        "tags": [
+          "al",
+          "call-hierarchy",
+          "callees"
+        ],
         "modelDescription": "Find all procedures that a specific AL procedure calls (its callees). Provide a file URI and position on a procedure name. Returns a list of called procedures with their locations.",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "description": "File URI (file:///path/to/file.al)" },
-            "line": { "type": "number", "description": "Zero-based line number" },
-            "character": { "type": "number", "description": "Zero-based character offset" }
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            },
+            "line": {
+              "type": "number",
+              "description": "Zero-based line number"
+            },
+            "character": {
+              "type": "number",
+              "description": "Zero-based character offset"
+            }
           },
-          "required": ["uri", "line", "character"]
+          "required": [
+            "uri",
+            "line",
+            "character"
+          ]
         }
       },
       {
         "name": "al_codeLens",
-        "tags": ["al", "code-lens", "references"],
+        "tags": [
+          "al",
+          "code-lens",
+          "references"
+        ],
         "modelDescription": "Get reference counts for all procedures in an AL file. Returns code lens items showing how many callers each procedure has. Use this to quickly identify unused or heavily-used procedures.",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "description": "File URI (file:///path/to/file.al)" }
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            }
           },
-          "required": ["uri"]
+          "required": [
+            "uri"
+          ]
         }
       },
       {
         "name": "al_codeQualityDiagnostics",
-        "tags": ["al", "diagnostics", "code-quality"],
+        "tags": [
+          "al",
+          "diagnostics",
+          "code-quality"
+        ],
         "modelDescription": "Get code quality diagnostics for AL files: unused procedures (no callers), high cyclomatic complexity, too many parameters, high fan-in, and long methods. Use this to identify code smells and improvement opportunities. Optionally filter by file URI.",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "uri": { "type": "string", "description": "File URI (file:///path/to/file.al) to filter diagnostics for a specific file, or omit for all files" }
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al) to filter diagnostics for a specific file, or omit for all files"
+            }
           }
         }
       }
@@ -149,6 +266,7 @@
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
+    "@types/node": "^25.4.0",
     "@types/vscode": "^1.99.0",
     "@vscode/vsce": "^3.0.0",
     "typescript": "^5.5.0"
