@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "al-language-server-go-windows",
-      "version": "1.5.2",
+      "version": "1.5.3",
       "source": "./al-language-server-go-windows",
       "description": "AL language server wrapper (Go) for Windows - includes Code Lens, Call Hierarchy, and unused procedure detection",
       "category": "development",
@@ -26,7 +26,7 @@
     },
     {
       "name": "al-language-server-go-linux",
-      "version": "1.5.2",
+      "version": "1.5.3",
       "source": "./al-language-server-go-linux",
       "description": "AL language server wrapper (Go) for Linux - includes Code Lens, Call Hierarchy, and unused procedure detection",
       "category": "development",
