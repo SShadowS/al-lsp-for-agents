@@ -1,3 +1,3 @@
-module github.com/SShadowS/claude-code-lsps/al-language-server-go
+module github.com/SShadowS/al-lsp-for-agents/al-language-server-go
 
 go 1.21

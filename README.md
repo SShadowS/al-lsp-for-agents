@@ -50,14 +50,14 @@ claude
 ### 2. Add Marketplace
 
 ```
-/plugin marketplace add SShadowS/claude-code-lsps
+/plugin marketplace add SShadowS/al-lsp-for-agents
 ```
 
 ### 3. Install Plugin
 
 1. Type `/plugins`
 2. Tab to `Marketplaces`
-3. Enter `claude-code-lsps` marketplace
+3. Enter `al-lsp-for-agents` marketplace
 4. Select the Go wrapper for your platform:
    - Windows: `al-language-server-go-windows`
    - Linux: `al-language-server-go-linux`

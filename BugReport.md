@@ -60,7 +60,7 @@ Users can use `documentSymbol` to list symbols in a specific file, or use `Grep`
 5. **Result:** 0 symbols returned
 
 ### Method 2: Via AL LSP Wrapper (with logging)
-1. Install the AL LSP wrapper from `SShadowS/claude-code-lsps`
+1. Install the AL LSP wrapper from `SShadowS/al-lsp-for-agents`
 2. Check the log file at `%TEMP%/al-lsp-wrapper.log`
 3. Ask Claude to search for workspace symbols
 4. **Log shows:**

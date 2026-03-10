@@ -72,7 +72,7 @@ cd vscode-extension && npm run compile
 ```powershell
 # Use the dev marketplace (see CLAUDE.md for setup)
 /plugin marketplace add ./.claude-plugin-dev/
-/plugin install al-language-server-go-windows@claude-code-lsps-dev
+/plugin install al-language-server-go-windows@al-lsp-for-agents-dev
 ```
 
 **VS Code extension:**

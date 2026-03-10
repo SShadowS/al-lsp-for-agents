@@ -48,14 +48,14 @@ if [ "$SKIP_RUST" = false ]; then
     # Check if al-call-hierarchy repo exists
     if [ ! -d "$AL_CALL_HIERARCHY_DIR" ]; then
         echo "ERROR: al-call-hierarchy not found at $AL_CALL_HIERARCHY_DIR"
-        echo "Please clone the al-call-hierarchy repository next to claude-code-lsps"
+        echo "Please clone the al-call-hierarchy repository next to al-lsp-for-agents"
         exit 1
     fi
 
     # Check if tree-sitter-al repo exists (required for building)
     if [ ! -d "$TREE_SITTER_AL_DIR" ]; then
         echo "ERROR: tree-sitter-al not found at $TREE_SITTER_AL_DIR"
-        echo "Please clone the tree-sitter-al repository next to claude-code-lsps"
+        echo "Please clone the tree-sitter-al repository next to al-lsp-for-agents"
         echo "  git clone https://github.com/AmpereComputing/tree-sitter-al ../tree-sitter-al"
         exit 1
     fi

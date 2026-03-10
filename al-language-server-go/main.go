@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SShadowS/claude-code-lsps/al-language-server-go/wrapper"
+	"github.com/SShadowS/al-lsp-for-agents/al-language-server-go/wrapper"
 )
 
 func main() {

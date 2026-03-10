@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SShadowS/claude-code-lsps"
+    "url": "https://github.com/SShadowS/al-lsp-for-agents"
   },
   "engines": {
     "vscode": "^1.99.0"

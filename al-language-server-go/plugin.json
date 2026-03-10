@@ -5,7 +5,7 @@
   "author": {
     "name": "SShadowS"
   },
-  "repository": "https://github.com/SShadowS/claude-code-lsps",
+  "repository": "https://github.com/SShadowS/al-lsp-for-agents",
   "license": "MIT",
   "keywords": ["al", "dynamics", "business-central", "lsp", "language-server", "go"]
 }
