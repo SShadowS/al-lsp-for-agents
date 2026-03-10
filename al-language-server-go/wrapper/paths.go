@@ -238,6 +238,22 @@ func ExtractSymbolFromPath(query string) string {
 	return query
 }
 
+// ResolveALExtensionPath resolves the AL extension path using this priority:
+// 1. Explicit path from --al-extension-path flag (if non-empty)
+// 2. AL_EXTENSION_PATH environment variable (if set)
+// 3. Auto-discovery via FindALExtension()
+func ResolveALExtensionPath(explicitPath string) (string, error) {
+	if explicitPath != "" {
+		return explicitPath, nil
+	}
+
+	if envPath := os.Getenv("AL_EXTENSION_PATH"); envPath != "" {
+		return envPath, nil
+	}
+
+	return FindALExtension()
+}
+
 // IsALFile checks if a file is an AL file based on extension
 func IsALFile(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))

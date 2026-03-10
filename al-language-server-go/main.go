@@ -11,6 +11,7 @@ import (
 func main() {
 	// Define flags
 	dumpClientCaps := flag.Bool("dump-client-caps", false, "Wait for initialize request, extract client capabilities as JSON, then exit")
+	alExtensionPath := flag.String("al-extension-path", "", "Path to the MS AL extension directory (skips auto-discovery)")
 	flag.Parse()
 
 	// Handle --dump-client-caps mode
@@ -25,6 +26,7 @@ func main() {
 
 	// Normal wrapper mode
 	w := wrapper.New()
+	w.ALExtensionPath = *alExtensionPath
 
 	if err := w.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "AL LSP Wrapper error: %v\n", err)

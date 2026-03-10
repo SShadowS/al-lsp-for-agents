@@ -29,6 +29,10 @@ const (
 
 // ALLSPWrapper wraps the AL Language Server
 type ALLSPWrapper struct {
+	// ALExtensionPath is an optional explicit path to the MS AL extension.
+	// When set, skips auto-discovery. Set via --al-extension-path flag.
+	ALExtensionPath string
+
 	// AL LSP process
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -95,8 +99,8 @@ func (w *ALLSPWrapper) Run() error {
 
 	w.Log("AL LSP Wrapper (Go) starting...")
 
-	// Find AL extension
-	extensionPath, err := FindALExtension()
+	// Resolve AL extension path (explicit flag > env var > auto-discovery)
+	extensionPath, err := ResolveALExtensionPath(w.ALExtensionPath)
 	if err != nil {
 		w.Log("Failed to find AL extension: %v", err)
 		return fmt.Errorf("AL extension not found: %w", err)
