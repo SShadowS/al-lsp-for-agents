@@ -48,16 +48,16 @@ All diagnostic thresholds are configurable via `.al-call-hierarchy.json` in your
 ```json
 {
   "diagnostics": {
-    "complexity": { "warning": 8, "critical": 15 },
-    "parameters": { "warning": 5, "critical": 10 },
+    "complexity": { "enabled": true, "warning": 8, "critical": 15 },
+    "parameters": { "enabled": false },
     "lineCount": { "warning": 30, "critical": 80 },
-    "fanIn": { "warning": 30 },
+    "fanIn": { "enabled": false },
     "unusedProcedures": false
   }
 }
 ```
 
-All values are optional — missing values use sensible defaults. You can tune thresholds per-project or disable categories entirely.
+All values are optional — missing values use sensible defaults. Set `"enabled": false` on any category to disable it entirely.
 
 ### Call Hierarchy
 
