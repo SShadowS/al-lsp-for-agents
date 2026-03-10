@@ -31,3 +31,12 @@ DEBUG.md
 
 # Serena project config (local)
 test-al-project/.serena/
+
+# Node modules
+node_modules/
+
+# VS Code extension binaries (built from source)
+vscode-extension/bin/
+
+# Superpowers planning docs (local)
+docs/superpowers/

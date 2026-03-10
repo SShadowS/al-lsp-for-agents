@@ -431,6 +431,9 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 	// Enrich with full XML doc comments (params, returns, remarks, etc.)
 	enriched := enrichHoverWithXmlDoc(w, normalized, params)
 
+	// Enrich field hovers with properties (Caption, TableRelation, CalcFormula, etc.)
+	enriched = enrichFieldHover(w, enriched, params)
+
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
