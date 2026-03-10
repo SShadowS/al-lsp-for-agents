@@ -41,6 +41,24 @@ Real-time diagnostics powered by [al-call-hierarchy](https://github.com/SShadowS
 - High fan-in (many callers)
 - Long methods
 
+### Configurable Thresholds
+
+All diagnostic thresholds are configurable via `.al-call-hierarchy.json` in your workspace root:
+
+```json
+{
+  "diagnostics": {
+    "complexity": { "warning": 8, "critical": 15 },
+    "parameters": { "warning": 5, "critical": 10 },
+    "lineCount": { "warning": 30, "critical": 80 },
+    "fanIn": { "warning": 30 },
+    "unusedProcedures": false
+  }
+}
+```
+
+All values are optional — missing values use sensible defaults. You can tune thresholds per-project or disable categories entirely.
+
 ### Call Hierarchy
 
 Full incoming and outgoing call analysis for procedures, including cross-file navigation and event subscriber detection.
