@@ -96,7 +96,7 @@ func (s *CallHierarchyServer) Start(executable string) error {
 
 	s.log("Starting al-call-hierarchy: %s", executable)
 
-	s.cmd = exec.Command(executable)
+	s.cmd = exec.Command(executable, "--no-watcher")
 
 	var err error
 	s.stdin, err = s.cmd.StdinPipe()
