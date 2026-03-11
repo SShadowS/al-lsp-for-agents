@@ -2,7 +2,7 @@
   "name": "al-lsp-for-agents",
   "displayName": "AL LSP for Agents",
   "description": "Code navigation, call hierarchy, and code quality diagnostics for AL (Business Central) — works with GitHub Copilot agent mode",
-  "version": "1.5.5",
+  "version": "1.6.0",
   "publisher": "SShadowSdk",
   "license": "MIT",
   "preview": true,
