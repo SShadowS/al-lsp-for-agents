@@ -43,7 +43,24 @@ Real-time diagnostics powered by [al-call-hierarchy](https://github.com/SShadowS
 
 ### Configurable Thresholds
 
-All diagnostic thresholds are configurable via `.al-call-hierarchy.json` in your workspace root:
+Diagnostic thresholds are configurable at two levels. All values are optional — missing values use sensible defaults.
+
+#### Global Defaults
+
+Set defaults for all your projects in `~/.al-call-hierarchy/config.json`:
+
+```json
+{
+  "diagnostics": {
+    "complexity": { "warning": 8, "critical": 15 },
+    "unusedProcedures": false
+  }
+}
+```
+
+#### Per-Workspace Overrides
+
+Override for a specific project in `{workspace}/.al-call-hierarchy.json`:
 
 ```json
 {
@@ -57,7 +74,7 @@ All diagnostic thresholds are configurable via `.al-call-hierarchy.json` in your
 }
 ```
 
-All values are optional — missing values use sensible defaults. Set `"enabled": false` on any category to disable it entirely.
+Config is merged per field: **built-in defaults → global → workspace**. A workspace config only needs to specify fields it wants to override. Set `"enabled": false` on any category to disable it entirely.
 
 ### Call Hierarchy
 
