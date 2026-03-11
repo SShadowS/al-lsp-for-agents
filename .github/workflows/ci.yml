@@ -54,3 +54,24 @@ jobs:
       - name: Compile
         working-directory: vscode-extension
         run: npm run compile
+
+  check-permissions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Linux binaries have execute permission
+        run: |
+          failed=false
+          for bin in al-language-server-go-linux/bin/al-call-hierarchy al-language-server-go-linux/bin/al-lsp-wrapper; do
+            mode=$(git ls-files -s "$bin" | awk '{print $1}')
+            if [ "$mode" != "100755" ]; then
+              echo "::error::$bin has mode $mode, expected 100755 (execute). Run: git update-index --chmod=+x $bin"
+              failed=true
+            else
+              echo "✓ $bin has correct permissions ($mode)"
+            fi
+          done
+          if [ "$failed" = true ]; then
+            exit 1
+          fi

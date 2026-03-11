@@ -88,7 +88,9 @@ if [ "$SKIP_RUST" = false ]; then
             echo "Building for Linux (using cross)..."
             MSYS_NO_PATHCONV=1 cross build --release --target x86_64-unknown-linux-gnu
             cp target/x86_64-unknown-linux-gnu/release/al-call-hierarchy "$SCRIPT_DIR/al-language-server-go-linux/bin/"
-            echo "  -> Copied to al-language-server-go-linux/bin/"
+            chmod +x "$SCRIPT_DIR/al-language-server-go-linux/bin/al-call-hierarchy"
+            git -C "$SCRIPT_DIR" update-index --chmod=+x al-language-server-go-linux/bin/al-call-hierarchy
+            echo "  -> Copied to al-language-server-go-linux/bin/ (with +x)"
         fi
     else
         echo "SKIP: Linux Rust build (cross not installed)"
@@ -117,7 +119,9 @@ if [ "$SKIP_GO" = false ]; then
 
     echo "Building for Linux..."
     GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../al-language-server-go-linux/bin/al-lsp-wrapper .
-    echo "  -> al-language-server-go-linux/bin/"
+    chmod +x ../al-language-server-go-linux/bin/al-lsp-wrapper
+    git -C "$SCRIPT_DIR" update-index --chmod=+x al-language-server-go-linux/bin/al-lsp-wrapper
+    echo "  -> al-language-server-go-linux/bin/ (with +x)"
 else
     echo ""
     echo "=== Skipping Go wrapper build (--skip-go) ==="
@@ -186,6 +190,22 @@ if [ "$VERIFY_FAILED" = true ]; then
     echo ""
     echo "WARNING: Some binaries are missing!"
 fi
+
+# Verify Linux binaries have execute permission in git (prevents EACCES on Linux)
+echo ""
+echo "Verifying Linux binary permissions in git..."
+for bin in al-language-server-go-linux/bin/al-call-hierarchy al-language-server-go-linux/bin/al-lsp-wrapper; do
+    mode=$(git -C "$SCRIPT_DIR" ls-files -s "$bin" 2>/dev/null | awk '{print $1}')
+    if [ "$mode" = "100755" ]; then
+        echo "  ✓ $(basename "$bin") has execute permission"
+    elif [ "$mode" = "100644" ]; then
+        echo "  ✗ $(basename "$bin") missing execute permission — fixing..."
+        git -C "$SCRIPT_DIR" update-index --chmod=+x "$bin"
+        echo "    Fixed. Remember to commit this change."
+    elif [ -z "$mode" ]; then
+        echo "  - $(basename "$bin") not tracked by git (skip)"
+    fi
+done
 
 echo ""
 echo "=== Build Summary ==="
