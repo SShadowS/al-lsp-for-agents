@@ -1,6 +1,6 @@
-# AL LSP Wrappers for Claude Code
+# AL LSP for Agents
 
-Claude Code marketplace providing AL Language Server wrappers for Business Central development.
+AL Language Server wrappers for AI-powered Business Central development. Works with Claude Code, OpenCode, and VS Code (GitHub Copilot agent mode).
 
 ## Available Wrappers
 
@@ -30,7 +30,25 @@ The Go wrappers are compiled binaries with no runtime dependencies. The wrapper 
 
 ## Installation
 
-### 1. Enable LSP Tool
+### OpenCode
+
+One-command setup:
+
+**Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/SShadowS/al-lsp-for-agents/main/scripts/setup-opencode.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/SShadowS/al-lsp-for-agents/main/scripts/setup-opencode.ps1 | iex
+```
+
+The script downloads the latest binaries, checks for the AL VS Code extension, and configures `opencode.json`. Run it again to update. Use `SCOPE=project` to write config to the current directory instead of globally.
+
+### Claude Code
+
+#### 1. Enable LSP Tool
 
 ```powershell
 # PowerShell (current session)
@@ -47,13 +65,13 @@ export ENABLE_LSP_TOOL=1
 claude
 ```
 
-### 2. Add Marketplace
+#### 2. Add Marketplace
 
 ```
 /plugin marketplace add SShadowS/al-lsp-for-agents
 ```
 
-### 3. Install Plugin
+#### 3. Install Plugin
 
 1. Type `/plugins`
 2. Tab to `Marketplaces`
