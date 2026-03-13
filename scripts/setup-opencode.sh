@@ -149,12 +149,12 @@ determine_config_path() {
         return
     fi
 
-    # Interactive: ask the user
-    echo ""
-    echo "Where should the OpenCode config be written?"
-    echo "  1) Global  ($GLOBAL_CONFIG)"
-    echo "  2) Project (./opencode.json)"
-    echo ""
+    # Interactive: ask the user (prompts go to stderr so stdout stays clean for return value)
+    echo "" >&2
+    echo "Where should the OpenCode config be written?" >&2
+    echo "  1) Global  ($GLOBAL_CONFIG)" >&2
+    echo "  2) Project (./opencode.json)" >&2
+    echo "" >&2
     read -rp "Choice [1]: " choice
     case "${choice:-1}" in
         2) echo "$PROJECT_CONFIG" ;;
