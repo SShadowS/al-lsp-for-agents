@@ -58,6 +58,27 @@ export function registerTools(
       new CodeQualityDiagnosticsTool(client)
     )
   );
+
+  context.subscriptions.push(
+    vscode.lm.registerTool(
+      "bclsp_documentSymbols",
+      new DocumentSymbolsTool(client)
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.lm.registerTool(
+      "bclsp_workspaceSymbols",
+      new WorkspaceSymbolsTool(client)
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.lm.registerTool(
+      "bclsp_renameSymbol",
+      new RenameSymbolTool(client)
+    )
+  );
 }
 
 // --- Tool Implementations ---
@@ -70,6 +91,45 @@ interface PositionInput {
 
 interface UriInput {
   uri?: string;
+}
+
+interface QueryInput {
+  query: string;
+}
+
+interface RenameInput {
+  uri: string;
+  line: number;
+  character: number;
+  newName: string;
+}
+
+function symbolKindToString(kind: number): string {
+  const kinds: Record<number, string> = {
+    1: "File", 2: "Module", 3: "Namespace", 4: "Package",
+    5: "Class", 6: "Method", 7: "Property", 8: "Field",
+    9: "Constructor", 10: "Enum", 11: "Interface", 12: "Function",
+    13: "Variable", 14: "Constant", 15: "String", 16: "Number",
+    17: "Boolean", 18: "Array", 19: "Object", 20: "Key",
+    21: "Null", 22: "EnumMember", 23: "Struct", 24: "Event",
+    25: "Operator", 26: "TypeParameter",
+  };
+  return kinds[kind] ?? "Symbol";
+}
+
+function formatSymbolTree(symbols: DocumentSymbol[], indent: number = 0): string {
+  const lines: string[] = [];
+  for (const sym of symbols) {
+    const prefix = "  ".repeat(indent);
+    const detail = sym.detail ? ` (${sym.detail})` : "";
+    lines.push(
+      `${prefix}${sym.name}${detail} (${symbolKindToString(sym.kind)}) - Line ${sym.range.start.line + 1}`
+    );
+    if (sym.children && sym.children.length > 0) {
+      lines.push(formatSymbolTree(sym.children, indent + 1));
+    }
+  }
+  return lines.join("\n");
 }
 
 class GoToDefinitionTool implements vscode.LanguageModelTool<PositionInput> {
@@ -410,6 +470,149 @@ function severityToString(severity: vscode.DiagnosticSeverity): string {
   }
 }
 
+class DocumentSymbolsTool implements vscode.LanguageModelTool<UriInput> {
+  constructor(private client: LanguageClient) {}
+
+  async invoke(
+    options: vscode.LanguageModelToolInvocationOptions<UriInput>,
+    _token: vscode.CancellationToken
+  ): Promise<vscode.LanguageModelToolResult> {
+    const { uri } = options.input;
+    if (!uri) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart("A file URI is required."),
+      ]);
+    }
+
+    const symbols = await this.client.sendRequest<DocumentSymbol[] | null>(
+      "textDocument/documentSymbol",
+      { textDocument: { uri } }
+    );
+
+    if (!symbols || symbols.length === 0) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart("No symbols found in this file."),
+      ]);
+    }
+
+    return new vscode.LanguageModelToolResult([
+      new vscode.LanguageModelTextPart(formatSymbolTree(symbols)),
+    ]);
+  }
+}
+
+class WorkspaceSymbolsTool implements vscode.LanguageModelTool<QueryInput> {
+  constructor(private client: LanguageClient) {}
+
+  async invoke(
+    options: vscode.LanguageModelToolInvocationOptions<QueryInput>,
+    _token: vscode.CancellationToken
+  ): Promise<vscode.LanguageModelToolResult> {
+    const { query } = options.input;
+    const symbols = await this.client.sendRequest<SymbolInformation[] | null>(
+      "workspace/symbol",
+      { query }
+    );
+
+    if (!symbols || symbols.length === 0) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart("No symbols found matching the query."),
+      ]);
+    }
+
+    const text = symbols
+      .map((sym) => {
+        const container = sym.containerName ? ` in ${sym.containerName}` : "";
+        return `${sym.name} (${symbolKindToString(sym.kind)})${container} - ${sym.location.uri}`;
+      })
+      .join("\n");
+
+    return new vscode.LanguageModelToolResult([
+      new vscode.LanguageModelTextPart(`Found ${symbols.length} symbols:\n${text}`),
+    ]);
+  }
+}
+
+class RenameSymbolTool implements vscode.LanguageModelTool<RenameInput> {
+  constructor(private client: LanguageClient) {}
+
+  async invoke(
+    options: vscode.LanguageModelToolInvocationOptions<RenameInput>,
+    _token: vscode.CancellationToken
+  ): Promise<vscode.LanguageModelToolResult> {
+    const { uri, line, character, newName } = options.input;
+
+    let lspEdit: object | null;
+    try {
+      lspEdit = await this.client.sendRequest<object | null>(
+        "textDocument/rename",
+        {
+          textDocument: { uri },
+          position: { line, character },
+          newName,
+        }
+      );
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Unknown error";
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Rename failed: ${message}`
+        ),
+      ]);
+    }
+
+    if (!lspEdit) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          "Rename could not be performed at this position."
+        ),
+      ]);
+    }
+
+    const workspaceEdit =
+      await this.client.protocol2CodeConverter.asWorkspaceEdit(lspEdit as any);
+
+    if (!workspaceEdit) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          "Rename could not be performed at this position."
+        ),
+      ]);
+    }
+
+    const success = await vscode.workspace.applyEdit(workspaceEdit);
+
+    if (!success) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart("Failed to apply rename edits."),
+      ]);
+    }
+
+    // Build summary from raw LSP edit (before conversion)
+    const rawEdit = lspEdit as { changes?: Record<string, unknown[]>; documentChanges?: unknown[] };
+    let fileCount = 0;
+    let totalEdits = 0;
+    const fileLines: string[] = [];
+    if (rawEdit.changes) {
+      for (const [fileUri, edits] of Object.entries(rawEdit.changes)) {
+        fileCount++;
+        totalEdits += edits.length;
+        fileLines.push(`  ${fileUri} (${edits.length} edits)`);
+      }
+    } else if (rawEdit.documentChanges) {
+      fileCount = rawEdit.documentChanges.length;
+      totalEdits = fileCount;
+    }
+
+    return new vscode.LanguageModelToolResult([
+      new vscode.LanguageModelTextPart(
+        `Renamed to "${newName}" across ${fileCount} files (${totalEdits} edits):\n${fileLines.join("\n")}`
+      ),
+    ]);
+  }
+}
+
 // --- LSP Types (subset needed for tool implementations) ---
 
 interface Range {
@@ -442,4 +645,20 @@ interface CodeLens {
     command: string;
     arguments?: unknown[];
   };
+}
+
+interface DocumentSymbol {
+  name: string;
+  detail?: string;
+  kind: number;
+  range: Range;
+  selectionRange: Range;
+  children?: DocumentSymbol[];
+}
+
+interface SymbolInformation {
+  name: string;
+  kind: number;
+  location: { uri: string; range: Range };
+  containerName?: string;
 }
