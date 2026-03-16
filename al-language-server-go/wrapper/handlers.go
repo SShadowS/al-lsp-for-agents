@@ -35,8 +35,10 @@ type WorkspaceSymbolParams struct {
 }
 
 // ALSymbolSearchParams represents parameters for al/symbolSearch
+// The AL Language Server expects {"query": "..."} NOT {"filter": "..."}
+// The old field name was wrong and caused the AL LS to ignore queries
 type ALSymbolSearchParams struct {
-	Filter string `json:"filter"`
+	Query string `json:"query"`
 }
 
 // ALSymbolSearchResponse represents the al/symbolSearch response format
@@ -664,7 +666,7 @@ func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 	// Use al/symbolSearch exclusively - workspace/symbol deadlocks the AL LSP
 	// Confirmed: deadlock persists even with proper server request handling
 	w.Log("Sending al/symbolSearch for query: %s", query)
-	response, err := w.SendRequestToLSP("al/symbolSearch", ALSymbolSearchParams{Filter: query})
+	response, err := w.SendRequestToLSP("al/symbolSearch", ALSymbolSearchParams{Query: query})
 	if err != nil {
 		w.Log("Failed to send al/symbolSearch request: %v", err)
 		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
