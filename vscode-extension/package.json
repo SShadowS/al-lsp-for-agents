@@ -353,7 +353,17 @@
           ]
         }
       }
-    ]
+    ],
+    "configuration": {
+      "title": "AL LSP for Agents",
+      "properties": {
+        "alLspForAgents.enableCodeQualityDiagnostics": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show code quality diagnostics from al-call-hierarchy in the editor (unused procedures, high complexity, too many parameters, high fan-in, long methods). Disabled by default — enable to see inline warnings."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
