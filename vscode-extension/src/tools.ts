@@ -73,12 +73,6 @@ export function registerTools(
     )
   );
 
-  context.subscriptions.push(
-    vscode.lm.registerTool(
-      "bclsp_symbolSearch",
-      new SymbolSearchTool(client)
-    )
-  );
 }
 
 // --- Tool Implementations ---
@@ -98,18 +92,6 @@ interface RenameInput {
   line: number;
   character: number;
   newName: string;
-}
-
-interface SymbolSearchInput {
-  query: string;
-  filters?: {
-    kinds?: string[];
-    namespace?: string;
-    objectName?: string;
-    memberKinds?: string[];
-    scope?: string;
-    limit?: number;
-  };
 }
 
 function symbolKindToString(kind: number): string {
@@ -589,45 +571,6 @@ class RenameSymbolTool implements vscode.LanguageModelTool<RenameInput> {
   }
 }
 
-class SymbolSearchTool implements vscode.LanguageModelTool<SymbolSearchInput> {
-  constructor(private client: LanguageClient) {}
-
-  async invoke(
-    options: vscode.LanguageModelToolInvocationOptions<SymbolSearchInput>,
-    _token: vscode.CancellationToken
-  ): Promise<vscode.LanguageModelToolResult> {
-    const { query, filters } = options.input;
-
-    const result = await this.client.sendRequest<ALSymbolSearchResult | null>(
-      "al/symbolSearch",
-      { query, filters: filters ?? {} }
-    );
-
-    if (!result || !result.symbols || result.symbols.length === 0) {
-      return new vscode.LanguageModelToolResult([
-        new vscode.LanguageModelTextPart("No symbols found matching the query."),
-      ]);
-    }
-
-    const text = result.symbols
-      .map((sym) => {
-        const container = sym.containerName ? ` in ${sym.containerName}` : "";
-        const sig = sym.signature ? ` — ${sym.signature}` : "";
-        const path = sym.path ? ` - ${sym.path}` : "";
-        return `${sym.name} (${sym.kind})${container}${sig}${path}`;
-      })
-      .join("\n");
-
-    const truncNote = result.truncated ? " (truncated)" : "";
-
-    return new vscode.LanguageModelToolResult([
-      new vscode.LanguageModelTextPart(
-        `Found ${result.symbols.length} symbols${truncNote}:\n${text}`
-      ),
-    ]);
-  }
-}
-
 // --- LSP Types (subset needed for tool implementations) ---
 
 interface Range {
@@ -671,14 +614,3 @@ interface DocumentSymbol {
   children?: DocumentSymbol[];
 }
 
-interface ALSymbolSearchResult {
-  symbols: Array<{
-    name: string;
-    fullName?: string;
-    kind: string;
-    containerName?: string;
-    signature?: string;
-    path?: string;
-  }>;
-  truncated: boolean;
-}

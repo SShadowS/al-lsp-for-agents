@@ -22,7 +22,6 @@ When using GitHub Copilot in agent mode, these tools become available:
 | `bclsp_codeQualityDiagnostics` | Unused procedures, high complexity, long methods, etc. |
 | `bclsp_documentSymbols` | Get the symbol tree for an AL file |
 | `bclsp_renameSymbol` | Rename an AL symbol across all files in the workspace |
-| `bclsp_symbolSearch` | Search AL symbols with rich filtering (objects and members) |
 
 ### Enriched Hover
 

@@ -352,63 +352,6 @@
             "newName"
           ]
         }
-      },
-      {
-        "name": "bclsp_symbolSearch",
-        "displayName": "AL Symbol Search",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "bclsp_symbolSearch",
-        "userDescription": "Search AL symbols with rich filtering (objects and members)",
-        "tags": [
-          "al",
-          "symbols",
-          "search"
-        ],
-        "modelDescription": "Search AL symbols (objects and members) by matching query text against symbol names. Supports rich filtering by object kind, member kind, container object name, namespace, and scope. Use filters.memberKinds=['Method','Field'] to find procedures and fields. Use filters.objectName='Customer' with filters.memberKinds=['Field'] to list fields of a specific table. Use query='*' as wildcard when relying on filters. Returns symbol name, kind, container, signature, and file path.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "query": {
-              "type": "string",
-              "description": "Required text to search in symbol names. Use a broad term (e.g., 'Customer', 'Post') or '*' as wildcard when using filters."
-            },
-            "filters": {
-              "type": "object",
-              "description": "Optional filters to narrow results",
-              "properties": {
-                "kinds": {
-                  "type": "array",
-                  "items": { "type": "string" },
-                  "description": "Object kinds to include: Table, Codeunit, Page, Report, Enum, Query, XmlPort, Interface, PermissionSet, Profile, Entitlement, PageExtension, TableExtension, EnumExtension, ReportExtension, PermissionSetExtension, PageCustomization"
-                },
-                "objectName": {
-                  "type": "string",
-                  "description": "Exact container name for filtering members only (e.g., 'Customer' to find methods/fields inside Customer). Do NOT use to find the object itself—use query with kinds instead."
-                },
-                "memberKinds": {
-                  "type": "array",
-                  "items": { "type": "string" },
-                  "description": "Member kinds: Method, Field, Key, Action"
-                },
-                "namespace": {
-                  "type": "string",
-                  "description": "Restrict to a namespace"
-                },
-                "scope": {
-                  "type": "string",
-                  "description": "Scope: project | dependencies | all"
-                },
-                "limit": {
-                  "type": "number",
-                  "description": "Max results (default 200)"
-                }
-              }
-            }
-          },
-          "required": [
-            "query"
-          ]
-        }
       }
     ]
   },
