@@ -2,6 +2,14 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.9.1] - 2026-03-16
+
+### Changed
+- **Code quality diagnostics are now opt-in** — disabled by default in the VS Code editor. Enable via `alLspForAgents.enableCodeQualityDiagnostics` setting. The `bclsp_codeQualityDiagnostics` tool and Claude Code diagnostics are unaffected.
+
+### Added
+- New VS Code setting: `alLspForAgents.enableCodeQualityDiagnostics` (default: `false`).
+
 ## [1.9.0] - 2026-03-16
 
 ### Added
