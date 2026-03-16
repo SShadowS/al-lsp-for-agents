@@ -906,6 +906,75 @@ func (h *CodeLensHandler) Handle(msg *Message, w WrapperInterface) (*Message, *M
 }
 
 // GetDefaultHandlers returns the default set of handlers
+// SetActiveWorkspaceHandler handles al/setActiveWorkspace
+type SetActiveWorkspaceHandler struct{}
+
+func (h *SetActiveWorkspaceHandler) ShouldHandle(method string) bool {
+	return method == "al/setActiveWorkspace"
+}
+
+func (h *SetActiveWorkspaceHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	// Parse to extract workspace path for logging
+	var params struct {
+		CurrentWorkspaceFolderPath struct {
+			URI  string `json:"uri"`
+			Name string `json:"name"`
+		} `json:"currentWorkspaceFolderPath"`
+	}
+	if err := json.Unmarshal(msg.Params, &params); err == nil && params.CurrentWorkspaceFolderPath.URI != "" {
+		w.Log("Switching active workspace to: %s (%s)",
+			params.CurrentWorkspaceFolderPath.Name,
+			params.CurrentWorkspaceFolderPath.URI)
+	}
+
+	// Forward to AL LSP
+	var rawParams interface{}
+	json.Unmarshal(msg.Params, &rawParams)
+
+	response, err := w.SendRequestToLSP("al/setActiveWorkspace", rawParams)
+	if err != nil {
+		w.Log("al/setActiveWorkspace failed: %v", err)
+		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+	}
+
+	if response.Error != nil {
+		return nil, &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Error:   response.Error,
+		}
+	}
+
+	return &Message{
+		JSONRPC: "2.0",
+		ID:      msg.ID,
+		Result:  response.Result,
+	}, nil
+}
+
+// DidChangeWorkspaceFoldersHandler handles al/didChangeWorkspaceFolders (notification)
+type DidChangeWorkspaceFoldersHandler struct{}
+
+func (h *DidChangeWorkspaceFoldersHandler) ShouldHandle(method string) bool {
+	return method == "al/didChangeWorkspaceFolders"
+}
+
+func (h *DidChangeWorkspaceFoldersHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	w.Log("Forwarding al/didChangeWorkspaceFolders to AL LSP and al-call-hierarchy")
+
+	// Forward to AL LSP as notification
+	w.SendNotificationToLSP("al/didChangeWorkspaceFolders", msg.Params)
+
+	// Also forward to al-call-hierarchy using standard LSP notification
+	chServer := w.GetCallHierarchyServer()
+	if chServer != nil && chServer.IsInitialized() {
+		chServer.SendNotification("workspace/didChangeWorkspaceFolders", msg.Params)
+	}
+
+	// Notification — no response to client
+	return nil, nil
+}
+
 func GetDefaultHandlers() []Handler {
 	return []Handler{
 		&DefinitionHandler{},
@@ -915,5 +984,7 @@ func GetDefaultHandlers() []Handler {
 		&ReferencesHandler{},
 		NewCallHierarchyHandler(),
 		&CodeLensHandler{},
+		&SetActiveWorkspaceHandler{},
+		&DidChangeWorkspaceFoldersHandler{},
 	}
 }
