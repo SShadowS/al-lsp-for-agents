@@ -1,0 +1,73 @@
+# Changelog
+
+All notable changes to AL LSP for Agents are documented here.
+
+## [1.9.0] - 2026-03-16
+
+### Added
+- **Multi-root workspace support** — all AL project folders in a multi-root workspace now receive proper LSP support, not just the first one. The extension automatically switches the active workspace when tool requests target files in different folders.
+- Go wrapper forwards `workspaceFolders` to both the AL Language Server and al-call-hierarchy during initialization.
+- Workspace folder add/remove events forwarded via `al/didChangeWorkspaceFolders`.
+
+## [1.8.2] - 2026-03-16
+
+### Removed
+- Removed `bclsp_workspaceSymbols` and `bclsp_symbolSearch` from the VS Code extension — redundant with the MS AL extension's `al_symbolsearch` tool which is always available in VS Code and has more filters. The Go wrapper still handles `workspace/symbol` for Claude Code users.
+
+## [1.8.1] - 2026-03-16
+
+### Fixed
+- **workspace/symbol query filtering** — the Go wrapper was sending `{"filter": "..."}` but the AL Language Server expects `{"query": "..."}`. Queries now return filtered results instead of the first 200 unfiltered symbols.
+
+### Added
+- `bclsp_symbolSearch` tool exposing the full `al/symbolSearch` capabilities including member-level search via `filters.memberKinds`, `filters.objectName`, and `filters.kinds`.
+
+## [1.8.0] - 2026-03-16
+
+### Added
+- `bclsp_documentSymbols` — get the hierarchical symbol tree for an AL file (objects, procedures, fields, actions).
+- `bclsp_workspaceSymbols` — search for symbols across the workspace by name.
+- `bclsp_renameSymbol` — rename a symbol at a position, applying changes across all files.
+
+### Changed
+- Updated esbuild to 0.27.4, @types/node to 25.5.0.
+
+## [1.7.0] - 2026-03-16
+
+### Changed
+- **Renamed all tool prefixes from `al_` to `bclsp_`** to avoid collision with Microsoft's AL Language Extension tools which also use `al_*`. The `bclsp_` prefix ("BC LSP") uniquely identifies these tools without reading descriptions.
+- Updated al-call-hierarchy to v0.4.3 (fixes URI percent-decoding on Windows).
+
+### Breaking
+- All tool names changed: `al_goToDefinition` → `bclsp_goToDefinition`, etc. Update any instruction files or prompt configurations that reference the old names.
+
+## [1.6.2] - 2026-03-14
+
+### Fixed
+- Updated al-call-hierarchy with fix for case-sensitive path lookup on Windows.
+
+## [1.6.1] - 2026-03-11
+
+### Fixed
+- Fixed EMFILE (too many open files) exhaustion by disabling redundant file watcher that conflicted with the LanguageClient's built-in file watching.
+
+## [1.6.0] - 2026-03-11
+
+### Added
+- Code quality diagnostics: unused procedures, high cyclomatic complexity, too many parameters, high fan-in, long methods.
+- Code lens showing reference counts per procedure.
+- Configurable diagnostic thresholds via global (`~/.al-call-hierarchy/config.json`) and per-workspace (`.al-call-hierarchy.json`) configuration.
+
+## [1.5.2] - 2026-03-10
+
+### Added
+- Enriched hover with XML doc comments, field properties, and action properties extracted via tree-sitter.
+- Configurable diagnostic thresholds with per-category enable/disable flags.
+
+## [1.5.0] - 2026-03-10
+
+### Added
+- Initial VS Code Marketplace release.
+- Language Model Tools for GitHub Copilot agent mode: `al_goToDefinition`, `al_hover`, `al_findReferences`, `al_prepareCallHierarchy`, `al_incomingCalls`, `al_outgoingCalls`, `al_codeLens`, `al_codeQualityDiagnostics`.
+- Go wrapper combining Microsoft AL Language Server with al-call-hierarchy.
+- Bundled binaries for Windows and Linux — no additional installation needed.
