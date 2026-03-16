@@ -314,31 +314,6 @@
         }
       },
       {
-        "name": "bclsp_workspaceSymbols",
-        "displayName": "AL Workspace Symbols",
-        "canBeReferencedInPrompt": true,
-        "toolReferenceName": "bclsp_workspaceSymbols",
-        "userDescription": "Search for AL symbols across the workspace by name",
-        "tags": [
-          "al",
-          "symbols",
-          "search"
-        ],
-        "modelDescription": "Search for AL symbols across the workspace by name. Returns matching tables, codeunits, pages, procedures, and other symbols with their file locations. Use this to find where a symbol is defined without knowing its file.",
-        "inputSchema": {
-          "type": "object",
-          "properties": {
-            "query": {
-              "type": "string",
-              "description": "Search query (symbol name or partial name)"
-            }
-          },
-          "required": [
-            "query"
-          ]
-        }
-      },
-      {
         "name": "bclsp_renameSymbol",
         "displayName": "AL Rename Symbol",
         "canBeReferencedInPrompt": true,

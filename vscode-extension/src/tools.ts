@@ -68,13 +68,6 @@ export function registerTools(
 
   context.subscriptions.push(
     vscode.lm.registerTool(
-      "bclsp_workspaceSymbols",
-      new WorkspaceSymbolsTool(client)
-    )
-  );
-
-  context.subscriptions.push(
-    vscode.lm.registerTool(
       "bclsp_renameSymbol",
       new RenameSymbolTool(client)
     )
@@ -98,10 +91,6 @@ interface PositionInput {
 
 interface UriInput {
   uri?: string;
-}
-
-interface QueryInput {
-  query: string;
 }
 
 interface RenameInput {
@@ -520,38 +509,6 @@ class DocumentSymbolsTool implements vscode.LanguageModelTool<UriInput> {
   }
 }
 
-class WorkspaceSymbolsTool implements vscode.LanguageModelTool<QueryInput> {
-  constructor(private client: LanguageClient) {}
-
-  async invoke(
-    options: vscode.LanguageModelToolInvocationOptions<QueryInput>,
-    _token: vscode.CancellationToken
-  ): Promise<vscode.LanguageModelToolResult> {
-    const { query } = options.input;
-    const symbols = await this.client.sendRequest<SymbolInformation[] | null>(
-      "workspace/symbol",
-      { query }
-    );
-
-    if (!symbols || symbols.length === 0) {
-      return new vscode.LanguageModelToolResult([
-        new vscode.LanguageModelTextPart("No symbols found matching the query."),
-      ]);
-    }
-
-    const text = symbols
-      .map((sym) => {
-        const container = sym.containerName ? ` in ${sym.containerName}` : "";
-        return `${sym.name} (${symbolKindToString(sym.kind)})${container} - ${sym.location.uri}`;
-      })
-      .join("\n");
-
-    return new vscode.LanguageModelToolResult([
-      new vscode.LanguageModelTextPart(`Found ${symbols.length} symbols:\n${text}`),
-    ]);
-  }
-}
-
 class RenameSymbolTool implements vscode.LanguageModelTool<RenameInput> {
   constructor(private client: LanguageClient) {}
 
@@ -712,13 +669,6 @@ interface DocumentSymbol {
   range: Range;
   selectionRange: Range;
   children?: DocumentSymbol[];
-}
-
-interface SymbolInformation {
-  name: string;
-  kind: number;
-  location: { uri: string; range: Range };
-  containerName?: string;
 }
 
 interface ALSymbolSearchResult {
