@@ -11,50 +11,50 @@ export function registerTools(
 ): void {
   context.subscriptions.push(
     vscode.lm.registerTool(
-      "al_goToDefinition",
+      "bclsp_goToDefinition",
       new GoToDefinitionTool(client)
     )
   );
 
   context.subscriptions.push(
-    vscode.lm.registerTool("al_hover", new HoverTool(client))
+    vscode.lm.registerTool("bclsp_hover", new HoverTool(client))
   );
 
   context.subscriptions.push(
     vscode.lm.registerTool(
-      "al_findReferences",
+      "bclsp_findReferences",
       new FindReferencesTool(client)
     )
   );
 
   context.subscriptions.push(
     vscode.lm.registerTool(
-      "al_prepareCallHierarchy",
+      "bclsp_prepareCallHierarchy",
       new PrepareCallHierarchyTool(client)
     )
   );
 
   context.subscriptions.push(
     vscode.lm.registerTool(
-      "al_incomingCalls",
+      "bclsp_incomingCalls",
       new IncomingCallsTool(client)
     )
   );
 
   context.subscriptions.push(
     vscode.lm.registerTool(
-      "al_outgoingCalls",
+      "bclsp_outgoingCalls",
       new OutgoingCallsTool(client)
     )
   );
 
   context.subscriptions.push(
-    vscode.lm.registerTool("al_codeLens", new CodeLensTool(client))
+    vscode.lm.registerTool("bclsp_codeLens", new CodeLensTool(client))
   );
 
   context.subscriptions.push(
     vscode.lm.registerTool(
-      "al_codeQualityDiagnostics",
+      "bclsp_codeQualityDiagnostics",
       new CodeQualityDiagnosticsTool(client)
     )
   );
