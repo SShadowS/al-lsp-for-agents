@@ -43,6 +43,8 @@ Real-time diagnostics powered by [al-call-hierarchy](https://github.com/SShadowS
 - High fan-in (many callers)
 - Long methods
 
+> **Note:** Code quality diagnostics are disabled by default in the editor. To enable them, set `alLspForAgents.enableCodeQualityDiagnostics` to `true` in your VS Code settings. The `bclsp_codeQualityDiagnostics` tool always works regardless of this setting.
+
 ### Configurable Thresholds
 
 Diagnostic thresholds are configurable at two levels. All values are optional — missing values use sensible defaults.
