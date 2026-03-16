@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { LanguageClient } from "vscode-languageclient/node";
+import { ensureActiveWorkspace } from "./extension";
 
 /**
  * Registers Language Model Tools that Copilot agent mode can invoke.
@@ -130,6 +131,7 @@ class GoToDefinitionTool implements vscode.LanguageModelTool<PositionInput> {
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     const { uri, line, character } = options.input;
+    await ensureActiveWorkspace(uri);
     const locations = await this.client.sendRequest<
       { uri: string; range: Range }[] | { uri: string; range: Range } | null
     >("textDocument/definition", {
@@ -162,6 +164,7 @@ class HoverTool implements vscode.LanguageModelTool<PositionInput> {
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     const { uri, line, character } = options.input;
+    await ensureActiveWorkspace(uri);
     const hover = await this.client.sendRequest<{
       contents: { kind: string; value: string } | string;
     } | null>("textDocument/hover", {
@@ -195,6 +198,7 @@ class FindReferencesTool implements vscode.LanguageModelTool<PositionInput> {
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     const { uri, line, character } = options.input;
+    await ensureActiveWorkspace(uri);
     const refs = await this.client.sendRequest<
       { uri: string; range: Range }[] | null
     >("textDocument/references", {
@@ -229,6 +233,7 @@ class PrepareCallHierarchyTool
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     const { uri, line, character } = options.input;
+    await ensureActiveWorkspace(uri);
     const items = await this.client.sendRequest<CallHierarchyItem[] | null>(
       "textDocument/prepareCallHierarchy",
       {
@@ -266,6 +271,7 @@ class IncomingCallsTool implements vscode.LanguageModelTool<PositionInput> {
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     const { uri, line, character } = options.input;
+    await ensureActiveWorkspace(uri);
 
     // Step 1: Prepare call hierarchy
     const items = await this.client.sendRequest<CallHierarchyItem[] | null>(
@@ -321,6 +327,7 @@ class OutgoingCallsTool implements vscode.LanguageModelTool<PositionInput> {
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     const { uri, line, character } = options.input;
+    await ensureActiveWorkspace(uri);
 
     const items = await this.client.sendRequest<CallHierarchyItem[] | null>(
       "textDocument/prepareCallHierarchy",
@@ -374,6 +381,7 @@ class CodeLensTool implements vscode.LanguageModelTool<UriInput> {
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     const { uri } = options.input;
+    if (uri) await ensureActiveWorkspace(uri);
     const lenses = await this.client.sendRequest<CodeLens[] | null>(
       "textDocument/codeLens",
       { textDocument: { uri } }
@@ -473,6 +481,7 @@ class DocumentSymbolsTool implements vscode.LanguageModelTool<UriInput> {
         new vscode.LanguageModelTextPart("A file URI is required."),
       ]);
     }
+    await ensureActiveWorkspace(uri);
 
     const symbols = await this.client.sendRequest<DocumentSymbol[] | null>(
       "textDocument/documentSymbol",
@@ -499,6 +508,7 @@ class RenameSymbolTool implements vscode.LanguageModelTool<RenameInput> {
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
     const { uri, line, character, newName } = options.input;
+    await ensureActiveWorkspace(uri);
 
     let lspEdit: object | null;
     try {
