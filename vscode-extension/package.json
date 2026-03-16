@@ -33,10 +33,10 @@
   "contributes": {
     "languageModelTools": [
       {
-        "name": "al_goToDefinition",
+        "name": "bclsp_goToDefinition",
         "displayName": "AL Go To Definition",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "al_goToDefinition",
+        "toolReferenceName": "bclsp_goToDefinition",
         "userDescription": "Navigate to where an AL symbol is defined",
         "tags": [
           "al",
@@ -68,10 +68,10 @@
         }
       },
       {
-        "name": "al_hover",
+        "name": "bclsp_hover",
         "displayName": "AL Hover",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "al_hover",
+        "toolReferenceName": "bclsp_hover",
         "userDescription": "Get type info, signatures, and field lists for AL symbols",
         "tags": [
           "al",
@@ -103,10 +103,10 @@
         }
       },
       {
-        "name": "al_findReferences",
+        "name": "bclsp_findReferences",
         "displayName": "AL Find References",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "al_findReferences",
+        "toolReferenceName": "bclsp_findReferences",
         "userDescription": "Find all usages of an AL symbol across the project",
         "tags": [
           "al",
@@ -138,10 +138,10 @@
         }
       },
       {
-        "name": "al_prepareCallHierarchy",
+        "name": "bclsp_prepareCallHierarchy",
         "displayName": "AL Prepare Call Hierarchy",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "al_prepareCallHierarchy",
+        "toolReferenceName": "bclsp_prepareCallHierarchy",
         "userDescription": "Get call hierarchy item at a cursor position",
         "tags": [
           "al",
@@ -172,10 +172,10 @@
         }
       },
       {
-        "name": "al_incomingCalls",
+        "name": "bclsp_incomingCalls",
         "displayName": "AL Incoming Calls",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "al_incomingCalls",
+        "toolReferenceName": "bclsp_incomingCalls",
         "userDescription": "Find all callers of an AL procedure",
         "tags": [
           "al",
@@ -207,10 +207,10 @@
         }
       },
       {
-        "name": "al_outgoingCalls",
+        "name": "bclsp_outgoingCalls",
         "displayName": "AL Outgoing Calls",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "al_outgoingCalls",
+        "toolReferenceName": "bclsp_outgoingCalls",
         "userDescription": "Find all procedures called by an AL procedure",
         "tags": [
           "al",
@@ -242,10 +242,10 @@
         }
       },
       {
-        "name": "al_codeLens",
+        "name": "bclsp_codeLens",
         "displayName": "AL Code Lens",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "al_codeLens",
+        "toolReferenceName": "bclsp_codeLens",
         "userDescription": "Get reference counts for procedures in an AL file",
         "tags": [
           "al",
@@ -267,10 +267,10 @@
         }
       },
       {
-        "name": "al_codeQualityDiagnostics",
+        "name": "bclsp_codeQualityDiagnostics",
         "displayName": "AL Code Quality Diagnostics",
         "canBeReferencedInPrompt": true,
-        "toolReferenceName": "al_codeQualityDiagnostics",
+        "toolReferenceName": "bclsp_codeQualityDiagnostics",
         "userDescription": "Get code quality diagnostics: unused procs, complexity, etc.",
         "tags": [
           "al",
