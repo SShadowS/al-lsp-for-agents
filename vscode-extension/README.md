@@ -12,14 +12,14 @@ When using GitHub Copilot in agent mode, these tools become available:
 
 | Tool | Description |
 |------|-------------|
-| `al_goToDefinition` | Navigate to where a symbol is defined |
-| `al_hover` | Get type info, signatures, field lists, and declared properties |
-| `al_findReferences` | Find all usages of a symbol across the project |
-| `al_prepareCallHierarchy` | Get call hierarchy item at a cursor position |
-| `al_incomingCalls` | Find all callers of a procedure |
-| `al_outgoingCalls` | Find all procedures called by a procedure |
-| `al_codeLens` | Get reference counts and quality metrics for procedures |
-| `al_codeQualityDiagnostics` | Unused procedures, high complexity, long methods, etc. |
+| `bclsp_goToDefinition` | Navigate to where a symbol is defined |
+| `bclsp_hover` | Get type info, signatures, field lists, and declared properties |
+| `bclsp_findReferences` | Find all usages of a symbol across the project |
+| `bclsp_prepareCallHierarchy` | Get call hierarchy item at a cursor position |
+| `bclsp_incomingCalls` | Find all callers of a procedure |
+| `bclsp_outgoingCalls` | Find all procedures called by a procedure |
+| `bclsp_codeLens` | Get reference counts and quality metrics for procedures |
+| `bclsp_codeQualityDiagnostics` | Unused procedures, high complexity, long methods, etc. |
 
 ### Enriched Hover
 
