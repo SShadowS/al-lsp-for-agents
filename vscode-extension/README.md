@@ -23,6 +23,7 @@ When using GitHub Copilot in agent mode, these tools become available:
 | `bclsp_documentSymbols` | Get the symbol tree for an AL file |
 | `bclsp_workspaceSymbols` | Search for AL symbols across the workspace by name |
 | `bclsp_renameSymbol` | Rename an AL symbol across all files in the workspace |
+| `bclsp_symbolSearch` | Search AL symbols with rich filtering (objects and members) |
 
 ### Enriched Hover
 
