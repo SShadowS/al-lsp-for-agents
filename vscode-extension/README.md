@@ -20,6 +20,9 @@ When using GitHub Copilot in agent mode, these tools become available:
 | `bclsp_outgoingCalls` | Find all procedures called by a procedure |
 | `bclsp_codeLens` | Get reference counts and quality metrics for procedures |
 | `bclsp_codeQualityDiagnostics` | Unused procedures, high complexity, long methods, etc. |
+| `bclsp_documentSymbols` | Get the symbol tree for an AL file |
+| `bclsp_workspaceSymbols` | Search for AL symbols across the workspace by name |
+| `bclsp_renameSymbol` | Rename an AL symbol across all files in the workspace |
 
 ### Enriched Hover
 
