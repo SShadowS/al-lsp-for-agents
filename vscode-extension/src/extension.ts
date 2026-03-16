@@ -8,8 +8,66 @@ import {
 import { registerTools } from "./tools";
 
 let client: LanguageClient;
+let lastActiveWorkspacePath: string | undefined;
+
+function resetState() {
+  lastActiveWorkspacePath = undefined;
+}
+
+/**
+ * Send al/setActiveWorkspace to switch the AL LS focus to the folder
+ * containing the given file URI. No-op if already active.
+ */
+export async function ensureActiveWorkspace(
+  fileUri: string
+): Promise<void> {
+  if (!client?.isRunning()) return;
+
+  const uri = vscode.Uri.parse(fileUri);
+  const folder = vscode.workspace.getWorkspaceFolder(uri);
+  if (!folder) return;
+
+  const folderPath = folder.uri.fsPath;
+  if (lastActiveWorkspacePath === folderPath) return;
+
+  const alConfig = vscode.workspace.getConfiguration("al", folder.uri);
+
+  try {
+    const result = await client.sendRequest<{ success: boolean }>(
+      "al/setActiveWorkspace",
+      {
+        currentWorkspaceFolderPath: {
+          uri: folder.uri.toString(),
+          name: folder.name,
+          index: folder.index,
+        },
+        settings: {
+          workspacePath: folderPath,
+          alResourceConfigurationSettings: {
+            packageCachePaths: alConfig.get("packageCachePath") ?? [],
+            enableCodeAnalysis: alConfig.get("enableCodeAnalysis") ?? false,
+            codeAnalyzers: alConfig.get("codeAnalyzers") ?? [],
+            backgroundCodeAnalysis: alConfig.get("backgroundCodeAnalysis") ?? "full",
+            assemblyProbingPaths: alConfig.get("assemblyProbingPaths") ?? [],
+          },
+          setActiveWorkspace: true,
+          expectedProjectReferenceDefinitions: [],
+          activeWorkspaceClosure: [],
+        },
+      }
+    );
+
+    if (result?.success) {
+      lastActiveWorkspacePath = folderPath;
+    }
+  } catch {
+    // Workspace switch failed — continue with current workspace
+  }
+}
 
 export async function activate(context: vscode.ExtensionContext) {
+  resetState();
+
   // Find the AL extension path
   const alExtension = vscode.extensions.getExtension("ms-dynamics-smb.al");
   const alExtensionPath = alExtension?.extensionPath ?? "";
@@ -96,6 +154,21 @@ export async function activate(context: vscode.ExtensionContext) {
     log.appendLine(`Tool registration failed: ${err}`);
     vscode.window.showErrorMessage(`AL LSP for Agents: Tool registration failed: ${err}`);
   }
+
+  // Forward workspace folder changes to the AL LS
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders((event) => {
+      if (!client?.isRunning()) return;
+      try {
+        client.sendNotification("al/didChangeWorkspaceFolders", {
+          added: event.added.map((f) => ({ name: f.name, uri: f.uri.toString() })),
+          removed: event.removed.map((f) => ({ name: f.name, uri: f.uri.toString() })),
+        });
+      } catch {
+        // Non-critical — workspace folder sync failed
+      }
+    })
+  );
 
   try {
     await client.start();
