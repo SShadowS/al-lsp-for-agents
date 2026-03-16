@@ -287,6 +287,96 @@
             }
           }
         }
+      },
+      {
+        "name": "bclsp_documentSymbols",
+        "displayName": "AL Document Symbols",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "bclsp_documentSymbols",
+        "userDescription": "Get the symbol tree for an AL file",
+        "tags": [
+          "al",
+          "symbols",
+          "structure"
+        ],
+        "modelDescription": "Get the symbol tree for an AL file. Returns all objects, procedures, fields, actions, and variables with their hierarchy. Use this to understand file structure before reading or editing.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            }
+          },
+          "required": [
+            "uri"
+          ]
+        }
+      },
+      {
+        "name": "bclsp_workspaceSymbols",
+        "displayName": "AL Workspace Symbols",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "bclsp_workspaceSymbols",
+        "userDescription": "Search for AL symbols across the workspace by name",
+        "tags": [
+          "al",
+          "symbols",
+          "search"
+        ],
+        "modelDescription": "Search for AL symbols across the workspace by name. Returns matching tables, codeunits, pages, procedures, and other symbols with their file locations. Use this to find where a symbol is defined without knowing its file.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query (symbol name or partial name)"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      {
+        "name": "bclsp_renameSymbol",
+        "displayName": "AL Rename Symbol",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "bclsp_renameSymbol",
+        "userDescription": "Rename an AL symbol across all files in the workspace",
+        "tags": [
+          "al",
+          "refactoring",
+          "rename"
+        ],
+        "modelDescription": "Rename an AL symbol at a given position, applying changes across all files in the workspace. Provide a file URI, position on the symbol, and the new name. Use this for safe refactoring of procedure names, variable names, and other symbols.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "uri": {
+              "type": "string",
+              "description": "File URI (file:///path/to/file.al)"
+            },
+            "line": {
+              "type": "number",
+              "description": "Zero-based line number"
+            },
+            "character": {
+              "type": "number",
+              "description": "Zero-based character offset"
+            },
+            "newName": {
+              "type": "string",
+              "description": "The new name for the symbol"
+            }
+          },
+          "required": [
+            "uri",
+            "line",
+            "character",
+            "newName"
+          ]
+        }
       }
     ]
   },
