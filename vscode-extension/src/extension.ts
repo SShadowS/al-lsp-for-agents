@@ -131,6 +131,19 @@ export async function activate(context: vscode.ExtensionContext) {
       prepareCallHierarchy: () => undefined,
       provideCallHierarchyIncomingCalls: () => undefined,
       provideCallHierarchyOutgoingCalls: () => undefined,
+      handleDiagnostics: (_uri, diagnostics, next) => {
+        const enabled = vscode.workspace
+          .getConfiguration("alLspForAgents")
+          .get<boolean>("enableCodeQualityDiagnostics", false);
+        if (enabled) {
+          next(_uri, diagnostics);
+        } else {
+          const filtered = diagnostics.filter(
+            (d) => d.source !== "al-call-hierarchy"
+          );
+          next(_uri, filtered);
+        }
+      },
     },
   };
 
