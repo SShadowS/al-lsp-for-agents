@@ -48,6 +48,7 @@ type ALLSPWrapper struct {
 	initializedProjects map[string]bool
 	projectManifests    map[string]*AppManifest
 	workspaceRoot       string
+	workspaceFolders    []WorkspaceFolder
 
 	// Request tracking
 	requestID      int
@@ -612,6 +613,21 @@ func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
 		}
 	}
 
+	// Extract workspace folders (multi-root support)
+	if len(params.WorkspaceFolders) > 0 {
+		w.workspaceFolders = params.WorkspaceFolders
+		w.Log("Workspace folders (%d):", len(params.WorkspaceFolders))
+		for _, folder := range params.WorkspaceFolders {
+			w.Log("  - %s (%s)", folder.Name, folder.URI)
+		}
+	} else if w.workspaceRoot != "" {
+		// Single-root fallback: construct one folder from rootUri
+		w.workspaceFolders = []WorkspaceFolder{
+			{URI: PathToFileURI(w.workspaceRoot), Name: filepath.Base(w.workspaceRoot)},
+		}
+		w.Log("Single workspace folder (from rootUri): %s", w.workspaceRoot)
+	}
+
 	// Find app.json to determine AL project root
 	projectRoot := ""
 	if w.workspaceRoot != "" {
@@ -632,6 +648,11 @@ func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
 		// Use current directory as fallback
 		cwd, _ := os.Getwd()
 		initParams = NewInitializeParams(cwd)
+	}
+
+	// Add all workspace folders to AL LS initialize params
+	if len(w.workspaceFolders) > 0 {
+		initParams.WorkspaceFolders = w.workspaceFolders
 	}
 
 	// Send initialize to AL LSP
@@ -933,19 +954,25 @@ func (w *ALLSPWrapper) startCallHierarchyServer() {
 		return
 	}
 
-	// Initialize with workspace root
+	// Initialize with all workspace folders
 	workspacePath := w.workspaceRoot
 	if workspacePath == "" {
 		workspacePath, _ = os.Getwd()
 	}
-
 	workspaceURI := PathToFileURI(workspacePath)
-	workspaceName := filepath.Base(workspacePath)
-	workspaceFolders := []WorkspaceFolder{
-		{URI: workspaceURI, Name: workspaceName},
+
+	// Use stored workspace folders (multi-root) or construct single folder
+	workspaceFolders := w.workspaceFolders
+	if len(workspaceFolders) == 0 {
+		workspaceFolders = []WorkspaceFolder{
+			{URI: workspaceURI, Name: filepath.Base(workspacePath)},
+		}
 	}
 
-	w.Log("Initializing call hierarchy with workspace: %s", workspacePath)
+	w.Log("Initializing call hierarchy with %d workspace folders", len(workspaceFolders))
+	for _, folder := range workspaceFolders {
+		w.Log("  - %s (%s)", folder.Name, folder.URI)
+	}
 	if err := w.callHierarchyServer.Initialize(workspaceURI, workspaceFolders); err != nil {
 		w.Log("Failed to initialize al-call-hierarchy: %v", err)
 		w.callHierarchyServer.Shutdown()
