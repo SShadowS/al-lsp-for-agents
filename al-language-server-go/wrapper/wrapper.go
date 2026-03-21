@@ -3,6 +3,7 @@ package wrapper
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -172,6 +172,7 @@ func (w *ALLSPWrapper) Run() error {
 	w.Log("Wrapper stopping: %v", err)
 
 	// Cleanup
+	w.removeLockFile()
 	if w.cmd.Process != nil {
 		w.cmd.Process.Kill()
 	}
@@ -315,19 +316,7 @@ func extractPIDFromLogPath(path string) int {
 	return pid
 }
 
-// isProcessRunning checks if a process with the given PID is still running
-func isProcessRunning(pid int) bool {
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-
-	// On Unix, FindProcess always succeeds, so we need to send signal 0 to check
-	// On Windows, FindProcess also always succeeds, but signal 0 returns an error
-	// for processes that don't exist. The syscall.Signal(0) approach works cross-platform.
-	err = process.Signal(syscall.Signal(0))
-	return err == nil
-}
+// isProcessRunning is implemented per-platform in process_windows.go and process_unix.go
 
 func (w *ALLSPWrapper) readStderr() {
 	scanner := bufio.NewScanner(w.stderr)
@@ -682,6 +671,9 @@ func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
 	w.initialized = true
 	w.initMu.Unlock()
 
+	// Check for another wrapper instance on the same workspace
+	w.checkDuplicateInstance()
+
 	// Modify capabilities to advertise extra capabilities (provided by al-call-hierarchy)
 	modifiedResult := w.addExtraCapabilities(response.Result)
 
@@ -738,6 +730,71 @@ func (w *ALLSPWrapper) addExtraCapabilities(result json.RawMessage) json.RawMess
 	}
 
 	return modifiedResult
+}
+
+// checkDuplicateInstance checks if another wrapper is already running for the
+// same workspace. If so, sends a warning to the client via window/showMessage.
+func (w *ALLSPWrapper) checkDuplicateInstance() {
+	if w.workspaceRoot == "" {
+		return
+	}
+
+	// Create a workspace-specific lock file in temp
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(NormalizePath(w.workspaceRoot))))[:16]
+	lockPath := filepath.Join(os.TempDir(), fmt.Sprintf("al-lsp-wrapper-%s.pid", hash))
+
+	pid := os.Getpid()
+
+	// Check if another instance is running
+	if data, err := os.ReadFile(lockPath); err == nil {
+		if otherPid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && otherPid != pid {
+			if isProcessRunning(otherPid) {
+				w.Log("WARNING: Another AL LSP wrapper (PID %d) is already running for workspace %s", otherPid, w.workspaceRoot)
+				warning := map[string]interface{}{
+					"type":    2, // Warning
+					"message": "AL LSP for Agents: Another instance is already running for this workspace. Having both the VS Code extension and Claude Code plugin active causes duplicate AL Language Servers, which can produce false compiler errors. Disable one of them.",
+				}
+				w.SendNotificationToClient("window/showMessage", warning)
+			}
+		}
+	}
+
+	// Write our PID
+	os.WriteFile(lockPath, []byte(strconv.Itoa(pid)), 0644)
+	w.Log("Lock file written: %s (PID %d)", lockPath, pid)
+}
+
+// removeLockFile removes the workspace lock file on shutdown
+func (w *ALLSPWrapper) removeLockFile() {
+	if w.workspaceRoot == "" {
+		return
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(NormalizePath(w.workspaceRoot))))[:16]
+	lockPath := filepath.Join(os.TempDir(), fmt.Sprintf("al-lsp-wrapper-%s.pid", hash))
+	// Only remove if it's our PID
+	if data, err := os.ReadFile(lockPath); err == nil {
+		if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid == os.Getpid() {
+			os.Remove(lockPath)
+			w.Log("Lock file removed: %s", lockPath)
+		}
+	}
+}
+
+// SendNotificationToClient sends a notification to the client (VS Code / Claude Code)
+func (w *ALLSPWrapper) SendNotificationToClient(method string, params interface{}) {
+	paramsJSON, err := json.Marshal(params)
+	if err != nil {
+		w.Log("Failed to marshal notification params: %v", err)
+		return
+	}
+	msg := &Message{
+		JSONRPC: "2.0",
+		Method:  method,
+		Params:  paramsJSON,
+	}
+	if err := WriteMessage(w.clientWriter, msg); err != nil {
+		w.Log("Failed to send notification to client: %v", err)
+	}
 }
 
 // SendRequestToLSP sends a request to the AL LSP and waits for response (30s timeout)
