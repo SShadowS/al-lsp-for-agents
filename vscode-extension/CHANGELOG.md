@@ -2,6 +2,15 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.9.2] - 2026-03-21
+
+### Fixed
+- **Multi-root workspace crash** — the wrapper crashed with `cannot unmarshal string into Go struct field Message.error of type wrapper.RPCError` when the AL Language Server returned a plain string error instead of a JSON-RPC error object. The custom `UnmarshalJSON` now handles both formats. (#13)
+- **Workspace folder state not updated on add/remove** — `al/didChangeWorkspaceFolders` forwarded the notification but never updated the wrapper's internal folder list, causing stale state.
+- **app.json search only checked first workspace folder** — `handleInitialize` now searches all workspace folders for an AL project, not just the `rootUri`.
+- **Hardcoded folder index in workspace activation** — `al/setActiveWorkspace` now sends the correct folder index instead of always `0`.
+- **Format mismatch for al-call-hierarchy notifications** — `workspace/didChangeWorkspaceFolders` now wraps params in the standard LSP `{event: ...}` format when forwarding to al-call-hierarchy.
+
 ## [1.9.1] - 2026-03-16
 
 ### Changed
