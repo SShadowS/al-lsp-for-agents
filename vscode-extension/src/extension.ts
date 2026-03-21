@@ -132,16 +132,20 @@ export async function activate(context: vscode.ExtensionContext) {
       provideCallHierarchyIncomingCalls: () => undefined,
       provideCallHierarchyOutgoingCalls: () => undefined,
       handleDiagnostics: (_uri, diagnostics, next) => {
+        // Only show al-call-hierarchy diagnostics (code quality).
+        // The MS AL extension handles all compiler diagnostics — showing
+        // compiler diagnostics from our second AL LSP instance would cause
+        // duplicates or false "already declared" errors (issue #15).
         const enabled = vscode.workspace
           .getConfiguration("alLspForAgents")
           .get<boolean>("enableCodeQualityDiagnostics", false);
         if (enabled) {
-          next(_uri, diagnostics);
-        } else {
           const filtered = diagnostics.filter(
-            (d) => d.source !== "al-call-hierarchy"
+            (d) => d.source === "al-call-hierarchy"
           );
           next(_uri, filtered);
+        } else {
+          next(_uri, []);
         }
       },
     },
