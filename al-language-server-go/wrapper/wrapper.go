@@ -49,6 +49,7 @@ type ALLSPWrapper struct {
 	projectManifests    map[string]*AppManifest
 	workspaceRoot       string
 	workspaceFolders    []WorkspaceFolder
+	activeProject       string // Currently active project root (normalized path)
 
 	// Request tracking
 	requestID      int
@@ -628,13 +629,24 @@ func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
 		w.Log("Single workspace folder (from rootUri): %s", w.workspaceRoot)
 	}
 
-	// Find app.json to determine AL project root
+	// Find app.json to determine AL project root — search all workspace folders
 	projectRoot := ""
-	if w.workspaceRoot != "" {
+	for _, folder := range w.workspaceFolders {
+		if folderPath, err := FileURIToPath(folder.URI); err == nil {
+			appJson := FindAppJSON(folderPath, 5)
+			if appJson != "" {
+				projectRoot = filepath.Dir(appJson)
+				w.Log("Found AL project at: %s (from folder %s)", projectRoot, folder.Name)
+				break
+			}
+		}
+	}
+	if projectRoot == "" && w.workspaceRoot != "" {
+		// Fallback: try workspaceRoot directly
 		appJson := FindAppJSON(w.workspaceRoot, 5)
 		if appJson != "" {
 			projectRoot = filepath.Dir(appJson)
-			w.Log("Found AL project at: %s", projectRoot)
+			w.Log("Found AL project at: %s (from rootUri)", projectRoot)
 		}
 	}
 
@@ -835,7 +847,9 @@ func (w *ALLSPWrapper) EnsureFileOpened(filePath string) error {
 	return nil
 }
 
-// EnsureProjectInitialized ensures the project for a file is initialized
+// EnsureProjectInitialized ensures the project for a file is initialized and active.
+// One-time setup (loadManifest, didChangeConfiguration) is cached per project.
+// Workspace activation (al/setActiveWorkspace) is sent whenever the active project changes.
 func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 	projectRoot := GetProjectRoot(filePath)
 	if projectRoot == "" {
@@ -845,55 +859,98 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 
 	normalizedRoot := NormalizePath(projectRoot)
 
-	if w.initializedProjects[normalizedRoot] {
-		return nil
-	}
+	// One-time initialization: workspace config, manifest, app.json
+	if !w.initializedProjects[normalizedRoot] {
+		w.Log("Initializing project: %s", normalizedRoot)
 
-	w.Log("Initializing project: %s", normalizedRoot)
+		// Parse app.json manifest
+		manifest := w.GetManifest(normalizedRoot)
 
-	// Parse app.json manifest
-	manifest := w.GetManifest(normalizedRoot)
-
-	// Send workspace configuration
-	settings := NewWorkspaceSettings(normalizedRoot, manifest)
-	configParams := DidChangeConfigurationParams{Settings: settings}
-	if err := w.SendNotificationToLSP("workspace/didChangeConfiguration", configParams); err != nil {
-		w.Log("Failed to send workspace configuration: %v", err)
-	}
-
-	// Open app.json
-	appJsonPath := filepath.Join(normalizedRoot, "app.json")
-	if err := w.EnsureFileOpened(appJsonPath); err != nil {
-		w.Log("Failed to open app.json: %v", err)
-		// Continue anyway - app.json might not exist
-	}
-
-	// Send al/loadManifest (like VS Code does) — use longer timeout for large projects
-	if manifest != nil && manifest.Raw != "" {
-		loadParams := LoadManifestParams{
-			ProjectFolder: normalizedRoot,
-			Manifest:      manifest.Raw,
+		// Send workspace configuration
+		settings := NewWorkspaceSettings(normalizedRoot, manifest)
+		configParams := DidChangeConfigurationParams{Settings: settings}
+		if err := w.SendNotificationToLSP("workspace/didChangeConfiguration", configParams); err != nil {
+			w.Log("Failed to send workspace configuration: %v", err)
 		}
-		if _, err := w.SendRequestToLSPWithTimeout("al/loadManifest", loadParams, 60*time.Second); err != nil {
-			w.Log("al/loadManifest failed (non-fatal): %v", err)
-		} else {
-			w.Log("al/loadManifest succeeded")
+
+		// Open app.json
+		appJsonPath := filepath.Join(normalizedRoot, "app.json")
+		if err := w.EnsureFileOpened(appJsonPath); err != nil {
+			w.Log("Failed to open app.json: %v", err)
+			// Continue anyway - app.json might not exist
 		}
+
+		// Send al/loadManifest (like VS Code does) — use longer timeout for large projects
+		if manifest != nil && manifest.Raw != "" {
+			loadParams := LoadManifestParams{
+				ProjectFolder: normalizedRoot,
+				Manifest:      manifest.Raw,
+			}
+			if _, err := w.SendRequestToLSPWithTimeout("al/loadManifest", loadParams, 60*time.Second); err != nil {
+				w.Log("al/loadManifest failed (non-fatal): %v", err)
+			} else {
+				w.Log("al/loadManifest succeeded")
+			}
+		}
+
+		w.initializedProjects[normalizedRoot] = true
+		w.Log("Project initialized: %s", normalizedRoot)
 	}
 
-	// Set active workspace — use longer timeout for large projects
-	activeParams := NewActiveWorkspaceParams(normalizedRoot, manifest)
-	if _, err := w.SendRequestToLSPWithTimeout("al/setActiveWorkspace", activeParams, 60*time.Second); err != nil {
-		w.Log("Failed to set active workspace: %v", err)
+	// Activation: switch the AL LS to this project if it's not already active
+	if w.activeProject != normalizedRoot {
+		w.Log("Activating project: %s (was: %s)", normalizedRoot, w.activeProject)
+
+		manifest := w.GetManifest(normalizedRoot)
+		folderIndex := w.getWorkspaceFolderIndex(normalizedRoot)
+		activeParams := NewActiveWorkspaceParams(normalizedRoot, manifest, folderIndex)
+		if _, err := w.SendRequestToLSPWithTimeout("al/setActiveWorkspace", activeParams, 60*time.Second); err != nil {
+			w.Log("Failed to set active workspace: %v", err)
+		}
+
+		// Wait for project to load (only on first activation)
+		if w.activeProject == "" {
+			w.waitForProjectLoad(normalizedRoot)
+		}
+
+		w.activeProject = normalizedRoot
 	}
-
-	// Wait for project to load
-	w.waitForProjectLoad(normalizedRoot)
-
-	w.initializedProjects[normalizedRoot] = true
-	w.Log("Project initialized: %s", normalizedRoot)
 
 	return nil
+}
+
+// getWorkspaceFolderIndex returns the index of a project root in the workspace folders list.
+// Returns 0 if not found (safe default).
+func (w *ALLSPWrapper) getWorkspaceFolderIndex(normalizedRoot string) int {
+	rootURI := PathToFileURI(normalizedRoot)
+	for i, folder := range w.workspaceFolders {
+		if folder.URI == rootURI {
+			return i
+		}
+		// Also try comparing by path
+		if path, err := FileURIToPath(folder.URI); err == nil {
+			if NormalizePath(path) == normalizedRoot {
+				return i
+			}
+		}
+	}
+	return 0
+}
+
+// UpdateWorkspaceFolders adds and removes workspace folders from internal state.
+func (w *ALLSPWrapper) UpdateWorkspaceFolders(added []WorkspaceFolder, removed []WorkspaceFolder) {
+	// Remove folders
+	for _, r := range removed {
+		for i, f := range w.workspaceFolders {
+			if f.URI == r.URI {
+				w.workspaceFolders = append(w.workspaceFolders[:i], w.workspaceFolders[i+1:]...)
+				break
+			}
+		}
+	}
+	// Add folders
+	w.workspaceFolders = append(w.workspaceFolders, added...)
+	w.Log("Updated workspace folders (%d total)", len(w.workspaceFolders))
 }
 
 func (w *ALLSPWrapper) waitForProjectLoad(workspacePath string) {

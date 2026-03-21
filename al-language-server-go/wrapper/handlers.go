@@ -162,6 +162,9 @@ type WrapperInterface interface {
 	// GetCallHierarchyServer returns the call hierarchy server (may be nil)
 	GetCallHierarchyServer() *CallHierarchyServer
 
+	// UpdateWorkspaceFolders adds/removes workspace folders from internal state
+	UpdateWorkspaceFolders(added []WorkspaceFolder, removed []WorkspaceFolder)
+
 	// Log logs a message
 	Log(format string, args ...interface{})
 }
@@ -962,13 +965,28 @@ func (h *DidChangeWorkspaceFoldersHandler) ShouldHandle(method string) bool {
 func (h *DidChangeWorkspaceFoldersHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
 	w.Log("Forwarding al/didChangeWorkspaceFolders to AL LSP and al-call-hierarchy")
 
-	// Forward to AL LSP as notification
+	// Parse added/removed folders to update internal state
+	var changeParams struct {
+		Added   []WorkspaceFolder `json:"added"`
+		Removed []WorkspaceFolder `json:"removed"`
+	}
+	if err := json.Unmarshal(msg.Params, &changeParams); err == nil {
+		w.UpdateWorkspaceFolders(changeParams.Added, changeParams.Removed)
+	} else {
+		w.Log("Failed to parse workspace folder changes: %v", err)
+	}
+
+	// Forward to AL LSP as notification (AL custom format: {added, removed})
 	w.SendNotificationToLSP("al/didChangeWorkspaceFolders", msg.Params)
 
-	// Also forward to al-call-hierarchy using standard LSP notification
+	// Forward to al-call-hierarchy using standard LSP format: {event: {added, removed}}
 	chServer := w.GetCallHierarchyServer()
 	if chServer != nil && chServer.IsInitialized() {
-		chServer.SendNotification("workspace/didChangeWorkspaceFolders", msg.Params)
+		// Standard LSP wraps the change in an "event" field
+		standardParams := map[string]json.RawMessage{
+			"event": msg.Params,
+		}
+		chServer.SendNotification("workspace/didChangeWorkspaceFolders", standardParams)
 	}
 
 	// Notification — no response to client

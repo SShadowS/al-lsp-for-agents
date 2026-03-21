@@ -185,13 +185,14 @@ type WorkspaceFolderPath struct {
 	Index int    `json:"index"`
 }
 
-// NewActiveWorkspaceParams creates parameters for al/setActiveWorkspace
-func NewActiveWorkspaceParams(projectRoot string, manifest *AppManifest) *ActiveWorkspaceParams {
+// NewActiveWorkspaceParams creates parameters for al/setActiveWorkspace.
+// folderIndex should match the workspace folder's position in the initialize params.
+func NewActiveWorkspaceParams(projectRoot string, manifest *AppManifest, folderIndex int) *ActiveWorkspaceParams {
 	return &ActiveWorkspaceParams{
 		CurrentWorkspaceFolderPath: WorkspaceFolderPath{
 			URI:   PathToFileURI(projectRoot),
 			Name:  filepath.Base(projectRoot),
-			Index: 0,
+			Index: folderIndex,
 		},
 		Settings: NewWorkspaceSettings(projectRoot, manifest),
 	}

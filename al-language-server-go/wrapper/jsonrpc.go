@@ -19,11 +19,34 @@ type Message struct {
 	Error   *RPCError        `json:"error,omitempty"`
 }
 
-// RPCError represents a JSON-RPC error
+// RPCError represents a JSON-RPC error.
+// Implements custom UnmarshalJSON to handle both standard JSON-RPC error objects
+// ({"code": -32600, "message": "..."}) and plain string errors ("some error")
+// which the AL Language Server may return in multi-root workspace scenarios.
 type RPCError struct {
 	Code    int             `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+func (e *RPCError) UnmarshalJSON(data []byte) error {
+	// Try standard object format first
+	type rpcErrorAlias RPCError
+	var obj rpcErrorAlias
+	if err := json.Unmarshal(data, &obj); err == nil {
+		*e = RPCError(obj)
+		return nil
+	}
+
+	// Fall back to plain string format: "error": "some message"
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		e.Code = InternalError
+		e.Message = s
+		return nil
+	}
+
+	return fmt.Errorf("cannot unmarshal error: expected object or string, got %s", string(data))
 }
 
 // IsRequest returns true if this is a request (has method and id)
