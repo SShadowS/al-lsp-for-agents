@@ -157,7 +157,7 @@ func NewWorkspaceSettings(projectRoot string, manifest *AppManifest) *WorkspaceS
 			AssemblyProbingPaths:     []string{"./.netpackages"},
 			CodeAnalyzers:            []string{},
 			EnableCodeAnalysis:       false,
-			BackgroundCodeAnalysis:   "Project",
+			BackgroundCodeAnalysis:   "None",
 			PackageCachePaths:        []string{"./.alpackages"},
 			RuleSetPath:              nil,
 			EnableCodeActions:        true,

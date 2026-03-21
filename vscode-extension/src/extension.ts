@@ -9,6 +9,7 @@ import { registerTools } from "./tools";
 
 let client: LanguageClient;
 let lastActiveWorkspacePath: string | undefined;
+let log: vscode.OutputChannel;
 
 function resetState() {
   lastActiveWorkspacePath = undefined;
@@ -139,11 +140,26 @@ export async function activate(context: vscode.ExtensionContext) {
         const enabled = vscode.workspace
           .getConfiguration("alLspForAgents")
           .get<boolean>("enableCodeQualityDiagnostics", false);
-        if (enabled) {
-          const filtered = diagnostics.filter(
-            (d) => d.source === "al-call-hierarchy"
+
+        // Log what we receive and filter for debugging (issue #15)
+        const compiler = diagnostics.filter(
+          (d) => d.source !== "al-call-hierarchy"
+        );
+        const codeQuality = diagnostics.filter(
+          (d) => d.source === "al-call-hierarchy"
+        );
+        if (compiler.length > 0 || codeQuality.length > 0) {
+          const file = _uri.path.split("/").pop();
+          log?.appendLine(
+            `[diag] ${file}: ${compiler.length} compiler (blocked), ${codeQuality.length} code-quality (${enabled ? "shown" : "hidden"})`
           );
-          next(_uri, filtered);
+        }
+
+        if (enabled) {
+          next(
+            _uri,
+            diagnostics.filter((d) => d.source === "al-call-hierarchy")
+          );
         } else {
           next(_uri, []);
         }
@@ -160,7 +176,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Register Language Model Tools for Copilot agent mode first —
   // tools should be available even if the LSP server is still starting
-  const log = vscode.window.createOutputChannel("AL LSP for Agents");
+  log = vscode.window.createOutputChannel("AL LSP for Agents");
   log.appendLine("Extension activating...");
   log.appendLine(`vscode.lm available: ${!!vscode.lm}`);
   log.appendLine(`vscode.lm.registerTool available: ${!!vscode.lm?.registerTool}`);
