@@ -2,7 +2,7 @@
   "name": "al-lsp-for-agents",
   "displayName": "AL LSP for Agents",
   "description": "Code navigation, call hierarchy, and code quality diagnostics for AL (Business Central) — works with GitHub Copilot agent mode",
-  "version": "1.9.7",
+  "version": "1.9.8",
   "publisher": "SShadowSdk",
   "license": "MIT",
   "preview": true,
@@ -43,7 +43,7 @@
           "navigation",
           "definition"
         ],
-        "modelDescription": "Navigate to where an AL symbol is defined. Use this when you need to find the source definition of a table, codeunit, procedure, field, enum, page, or any other AL object. Provide a file URI and position (line/character). Returns the file and location of the definition.",
+        "modelDescription": "Navigate to where an AL symbol is defined. Provide a file URI and either a symbolName (preferred) or a line/character position. When using symbolName, the tool automatically finds the correct position via documentSymbol.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -51,19 +51,21 @@
               "type": "string",
               "description": "File URI (file:///path/to/file.al)"
             },
+            "symbolName": {
+              "type": "string",
+              "description": "Name of the symbol to look up (e.g. 'ExportAsXML', 'CreateCustomer'). Preferred over line/character."
+            },
             "line": {
               "type": "number",
-              "description": "Zero-based line number"
+              "description": "Zero-based line number (fallback if symbolName not provided)"
             },
             "character": {
               "type": "number",
-              "description": "Zero-based character offset"
+              "description": "Zero-based character offset (fallback if symbolName not provided)"
             }
           },
           "required": [
-            "uri",
-            "line",
-            "character"
+            "uri"
           ]
         }
       },
@@ -78,7 +80,7 @@
           "type-info",
           "hover"
         ],
-        "modelDescription": "Get type information, procedure signatures, and record field lists for an AL symbol. Use this to understand what type a variable is, what fields a record has, or what parameters a procedure takes. Provide a file URI and position.",
+        "modelDescription": "Get type information, procedure signatures, and record field lists for an AL symbol. Provide a file URI and either a symbolName (preferred) or a line/character position. When using symbolName, the tool automatically finds the correct position.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -86,19 +88,21 @@
               "type": "string",
               "description": "File URI (file:///path/to/file.al)"
             },
+            "symbolName": {
+              "type": "string",
+              "description": "Name of the symbol to look up (e.g. 'ExportAsXML', 'CustomerRec'). Preferred over line/character."
+            },
             "line": {
               "type": "number",
-              "description": "Zero-based line number"
+              "description": "Zero-based line number (fallback if symbolName not provided)"
             },
             "character": {
               "type": "number",
-              "description": "Zero-based character offset"
+              "description": "Zero-based character offset (fallback if symbolName not provided)"
             }
           },
           "required": [
-            "uri",
-            "line",
-            "character"
+            "uri"
           ]
         }
       },
@@ -113,7 +117,7 @@
           "references",
           "usages"
         ],
-        "modelDescription": "Find all usages of an AL symbol across the project. Returns every file and location where the symbol is referenced. Use this before renaming or modifying a symbol to understand impact.",
+        "modelDescription": "Find all usages of an AL symbol across the project. Provide a file URI and either a symbolName (preferred) or a line/character position. Use this before renaming or modifying a symbol to understand impact.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -121,19 +125,21 @@
               "type": "string",
               "description": "File URI (file:///path/to/file.al)"
             },
+            "symbolName": {
+              "type": "string",
+              "description": "Name of the symbol to look up. Preferred over line/character."
+            },
             "line": {
               "type": "number",
-              "description": "Zero-based line number"
+              "description": "Zero-based line number (fallback if symbolName not provided)"
             },
             "character": {
               "type": "number",
-              "description": "Zero-based character offset"
+              "description": "Zero-based character offset (fallback if symbolName not provided)"
             }
           },
           "required": [
-            "uri",
-            "line",
-            "character"
+            "uri"
           ]
         }
       },
@@ -147,7 +153,7 @@
           "al",
           "call-hierarchy"
         ],
-        "modelDescription": "Get a call hierarchy item at a cursor position in an AL file. Use this to identify a procedure for subsequent incoming/outgoing call analysis. Provide a file URI and position on a procedure name.",
+        "modelDescription": "Get a call hierarchy item for an AL procedure. Provide a file URI and either a symbolName (preferred) or a line/character position on the procedure name.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -155,19 +161,21 @@
               "type": "string",
               "description": "File URI (file:///path/to/file.al)"
             },
+            "symbolName": {
+              "type": "string",
+              "description": "Name of the procedure. Preferred over line/character."
+            },
             "line": {
               "type": "number",
-              "description": "Zero-based line number"
+              "description": "Zero-based line number (fallback if symbolName not provided)"
             },
             "character": {
               "type": "number",
-              "description": "Zero-based character offset"
+              "description": "Zero-based character offset (fallback if symbolName not provided)"
             }
           },
           "required": [
-            "uri",
-            "line",
-            "character"
+            "uri"
           ]
         }
       },
@@ -182,7 +190,7 @@
           "call-hierarchy",
           "callers"
         ],
-        "modelDescription": "Find all procedures that call a specific AL procedure (its callers). Provide a file URI and position on a procedure name. Returns a list of calling procedures with their locations.",
+        "modelDescription": "Find all procedures that call a specific AL procedure (its callers). Provide a file URI and either a symbolName (preferred) or a line/character position on the procedure name.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -190,19 +198,21 @@
               "type": "string",
               "description": "File URI (file:///path/to/file.al)"
             },
+            "symbolName": {
+              "type": "string",
+              "description": "Name of the procedure. Preferred over line/character."
+            },
             "line": {
               "type": "number",
-              "description": "Zero-based line number"
+              "description": "Zero-based line number (fallback if symbolName not provided)"
             },
             "character": {
               "type": "number",
-              "description": "Zero-based character offset"
+              "description": "Zero-based character offset (fallback if symbolName not provided)"
             }
           },
           "required": [
-            "uri",
-            "line",
-            "character"
+            "uri"
           ]
         }
       },
@@ -217,7 +227,7 @@
           "call-hierarchy",
           "callees"
         ],
-        "modelDescription": "Find all procedures that a specific AL procedure calls (its callees). Provide a file URI and position on a procedure name. Returns a list of called procedures with their locations.",
+        "modelDescription": "Find all procedures that a specific AL procedure calls (its callees). Provide a file URI and either a symbolName (preferred) or a line/character position on the procedure name.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -225,19 +235,21 @@
               "type": "string",
               "description": "File URI (file:///path/to/file.al)"
             },
+            "symbolName": {
+              "type": "string",
+              "description": "Name of the procedure. Preferred over line/character."
+            },
             "line": {
               "type": "number",
-              "description": "Zero-based line number"
+              "description": "Zero-based line number (fallback if symbolName not provided)"
             },
             "character": {
               "type": "number",
-              "description": "Zero-based character offset"
+              "description": "Zero-based character offset (fallback if symbolName not provided)"
             }
           },
           "required": [
-            "uri",
-            "line",
-            "character"
+            "uri"
           ]
         }
       },
@@ -324,7 +336,7 @@
           "refactoring",
           "rename"
         ],
-        "modelDescription": "Rename an AL symbol at a given position, applying changes across all files in the workspace. Provide a file URI, position on the symbol, and the new name. Use this for safe refactoring of procedure names, variable names, and other symbols.",
+        "modelDescription": "Rename an AL symbol across all files in the workspace. Provide a file URI, either a symbolName (preferred) or line/character position, and the new name.",
         "inputSchema": {
           "type": "object",
           "properties": {
@@ -332,13 +344,17 @@
               "type": "string",
               "description": "File URI (file:///path/to/file.al)"
             },
+            "symbolName": {
+              "type": "string",
+              "description": "Name of the symbol to rename. Preferred over line/character."
+            },
             "line": {
               "type": "number",
-              "description": "Zero-based line number"
+              "description": "Zero-based line number (fallback if symbolName not provided)"
             },
             "character": {
               "type": "number",
-              "description": "Zero-based character offset"
+              "description": "Zero-based character offset (fallback if symbolName not provided)"
             },
             "newName": {
               "type": "string",
@@ -347,8 +363,6 @@
           },
           "required": [
             "uri",
-            "line",
-            "character",
             "newName"
           ]
         }

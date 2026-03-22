@@ -80,8 +80,54 @@ export function registerTools(
 
 interface PositionInput {
   uri: string;
-  line: number;
-  character: number;
+  line?: number;
+  character?: number;
+  symbolName?: string;
+}
+
+/**
+ * Resolve a PositionInput to a concrete {line, character} position.
+ * If symbolName is provided, uses documentSymbol to find the symbol's
+ * selectionRange. Otherwise falls back to the raw line/character.
+ */
+async function resolvePosition(
+  client: LanguageClient,
+  input: PositionInput
+): Promise<{ line: number; character: number } | null> {
+  if (input.symbolName) {
+    const symbols = await client.sendRequest<DocumentSymbol[] | null>(
+      "textDocument/documentSymbol",
+      { textDocument: { uri: input.uri } }
+    );
+    if (symbols) {
+      const found = findSymbolByName(symbols, input.symbolName);
+      if (found) {
+        return found.selectionRange.start;
+      }
+    }
+    // symbolName not found in documentSymbol results
+    return null;
+  }
+  if (input.line !== undefined && input.character !== undefined) {
+    return { line: input.line, character: input.character };
+  }
+  return null;
+}
+
+function findSymbolByName(
+  symbols: DocumentSymbol[],
+  name: string
+): DocumentSymbol | null {
+  for (const sym of symbols) {
+    if (sym.name === name || sym.name.startsWith(name + "(")) {
+      return sym;
+    }
+    if (sym.children) {
+      const found = findSymbolByName(sym.children, name);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 interface UriInput {
@@ -90,8 +136,9 @@ interface UriInput {
 
 interface RenameInput {
   uri: string;
-  line: number;
-  character: number;
+  line?: number;
+  character?: number;
+  symbolName?: string;
   newName: string;
 }
 
@@ -130,13 +177,22 @@ class GoToDefinitionTool implements vscode.LanguageModelTool<PositionInput> {
     options: vscode.LanguageModelToolInvocationOptions<PositionInput>,
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
-    const { uri, line, character } = options.input;
+    const { uri } = options.input;
     await ensureActiveWorkspace(uri);
+    const pos = await resolvePosition(this.client, options.input);
+    if (!pos) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Symbol "${options.input.symbolName}" not found in ${uri}.`
+        ),
+      ]);
+    }
+
     const locations = await this.client.sendRequest<
       { uri: string; range: Range }[] | { uri: string; range: Range } | null
     >("textDocument/definition", {
       textDocument: { uri },
-      position: { line, character },
+      position: pos,
     });
 
     if (!locations) {
@@ -163,13 +219,22 @@ class HoverTool implements vscode.LanguageModelTool<PositionInput> {
     options: vscode.LanguageModelToolInvocationOptions<PositionInput>,
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
-    const { uri, line, character } = options.input;
+    const { uri } = options.input;
     await ensureActiveWorkspace(uri);
+    const pos = await resolvePosition(this.client, options.input);
+    if (!pos) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Symbol "${options.input.symbolName}" not found in ${uri}.`
+        ),
+      ]);
+    }
+
     const hover = await this.client.sendRequest<{
       contents: { kind: string; value: string } | string;
     } | null>("textDocument/hover", {
       textDocument: { uri },
-      position: { line, character },
+      position: pos,
     });
 
     if (!hover) {
@@ -197,13 +262,22 @@ class FindReferencesTool implements vscode.LanguageModelTool<PositionInput> {
     options: vscode.LanguageModelToolInvocationOptions<PositionInput>,
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
-    const { uri, line, character } = options.input;
+    const { uri } = options.input;
     await ensureActiveWorkspace(uri);
+    const pos = await resolvePosition(this.client, options.input);
+    if (!pos) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Symbol "${options.input.symbolName}" not found in ${uri}.`
+        ),
+      ]);
+    }
+
     const refs = await this.client.sendRequest<
       { uri: string; range: Range }[] | null
     >("textDocument/references", {
       textDocument: { uri },
-      position: { line, character },
+      position: pos,
       context: { includeDeclaration: true },
     });
 
@@ -232,13 +306,22 @@ class PrepareCallHierarchyTool
     options: vscode.LanguageModelToolInvocationOptions<PositionInput>,
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
-    const { uri, line, character } = options.input;
+    const { uri } = options.input;
     await ensureActiveWorkspace(uri);
+    const pos = await resolvePosition(this.client, options.input);
+    if (!pos) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Symbol "${options.input.symbolName}" not found in ${uri}.`
+        ),
+      ]);
+    }
+
     const items = await this.client.sendRequest<CallHierarchyItem[] | null>(
       "textDocument/prepareCallHierarchy",
       {
         textDocument: { uri },
-        position: { line, character },
+        position: pos,
       }
     );
 
@@ -270,15 +353,23 @@ class IncomingCallsTool implements vscode.LanguageModelTool<PositionInput> {
     options: vscode.LanguageModelToolInvocationOptions<PositionInput>,
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
-    const { uri, line, character } = options.input;
+    const { uri } = options.input;
     await ensureActiveWorkspace(uri);
+    const pos = await resolvePosition(this.client, options.input);
+    if (!pos) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Symbol "${options.input.symbolName}" not found in ${uri}.`
+        ),
+      ]);
+    }
 
     // Step 1: Prepare call hierarchy
     const items = await this.client.sendRequest<CallHierarchyItem[] | null>(
       "textDocument/prepareCallHierarchy",
       {
         textDocument: { uri },
-        position: { line, character },
+        position: pos,
       }
     );
 
@@ -326,14 +417,22 @@ class OutgoingCallsTool implements vscode.LanguageModelTool<PositionInput> {
     options: vscode.LanguageModelToolInvocationOptions<PositionInput>,
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
-    const { uri, line, character } = options.input;
+    const { uri } = options.input;
     await ensureActiveWorkspace(uri);
+    const pos = await resolvePosition(this.client, options.input);
+    if (!pos) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Symbol "${options.input.symbolName}" not found in ${uri}.`
+        ),
+      ]);
+    }
 
     const items = await this.client.sendRequest<CallHierarchyItem[] | null>(
       "textDocument/prepareCallHierarchy",
       {
         textDocument: { uri },
-        position: { line, character },
+        position: pos,
       }
     );
 
@@ -507,8 +606,16 @@ class RenameSymbolTool implements vscode.LanguageModelTool<RenameInput> {
     options: vscode.LanguageModelToolInvocationOptions<RenameInput>,
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
-    const { uri, line, character, newName } = options.input;
+    const { uri, newName } = options.input;
     await ensureActiveWorkspace(uri);
+    const pos = await resolvePosition(this.client, options.input as PositionInput);
+    if (!pos) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Symbol "${options.input.symbolName}" not found in ${uri}.`
+        ),
+      ]);
+    }
 
     let lspEdit: object | null;
     try {
@@ -516,7 +623,7 @@ class RenameSymbolTool implements vscode.LanguageModelTool<RenameInput> {
         "textDocument/rename",
         {
           textDocument: { uri },
-          position: { line, character },
+          position: pos,
           newName,
         }
       );
