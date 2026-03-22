@@ -97,20 +97,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "al" }],
-    // No file watchers — we don't need to notify our AL LSP about file
-    // changes on disk. The MS AL extension handles that.
-
-    // Suppress all VS Code provider registrations AND document sync.
-    // The MS AL extension handles the editor experience. Our server is only
-    // used for on-demand tool queries via client.sendRequest(), and the
-    // wrapper's EnsureFileOpened handles opening files as needed.
-    // Suppressing document sync prevents our AL LSP from doing unnecessary
-    // compilation that interferes with the MS AL extension (issue #15).
+    // Suppress all VS Code provider registrations — the MS AL extension
+    // already provides these for the editor. We only use client.sendRequest()
+    // for our Language Model Tools, so we don't need duplicate providers.
+    // Document sync (didOpen etc.) is left enabled — the LanguageClient
+    // requires it to keep the server alive. BackgroundCodeAnalysis="None"
+    // in the wrapper prevents heavy compilation from these events.
     middleware: {
-      didOpen: () => {},
-      didChange: () => {},
-      didClose: () => {},
-      didSave: () => {},
       provideCompletionItem: () => undefined,
       provideHover: () => undefined,
       provideSignatureHelp: () => undefined,
