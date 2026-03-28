@@ -2,6 +2,35 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.9.9] - 2026-03-28
+
+### Fixed
+- **Extension conflict with AL Test Runner** -- added `--vscode` flag that disables `textDocumentSync` in server capabilities, preventing other extensions from flooding the wrapper's AL LSP with document events. (#17)
+- **Duplicate didOpen notifications** -- the wrapper now tracks files opened via VS Code's LanguageClient in `openedFiles`, so `EnsureFileOpened` no longer sends a second `didOpen` for files already synced.
+
+### Changed
+- Updated al-call-hierarchy to v0.5.0.
+
+## [1.9.8] - 2026-03-22
+
+### Added
+- **`symbolName` parameter** for position-based tools (`bclsp_goToDefinition`, `bclsp_hover`, `bclsp_findReferences`) -- when provided alongside a position, the wrapper verifies the symbol at that position matches the expected name, reducing false results from stale line numbers.
+
+## [1.9.7] - 2026-03-22
+
+### Fixed
+- **Reverted document sync suppression** -- suppressing `didOpen`/`didClose` via middleware caused the LanguageClient to shut down the server 300ms after initialization. Reverted to allowing document sync through. (#16)
+
+## [1.9.3-1.9.6] - 2026-03-21
+
+### Fixed
+- **Duplicate "Object Already Declared" diagnostics** -- multiple fixes to prevent false compiler errors when running alongside the MS AL extension in VS Code. (#15)
+  - Filter compiler diagnostics in the VS Code middleware (only show `al-call-hierarchy` diagnostics).
+  - Disable `backgroundCodeAnalysis` in the wrapper to prevent unnecessary compilation.
+  - Detect duplicate wrapper instances on the same workspace and warn the user.
+  - Remove `semanticTokensProvider` from capabilities (caused crashes in the AL LSP).
+  - Remove `executeCommandProvider` to avoid command registration conflicts.
+
 ## [1.9.2] - 2026-03-21
 
 ### Fixed
