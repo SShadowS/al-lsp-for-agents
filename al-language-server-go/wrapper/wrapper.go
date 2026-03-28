@@ -33,6 +33,12 @@ type ALLSPWrapper struct {
 	// When set, skips auto-discovery. Set via --al-extension-path flag.
 	ALExtensionPath string
 
+	// VSCodeMode disables textDocumentSync in the server capabilities so the
+	// LanguageClient won't send didOpen/didChange/didClose. In VS Code the
+	// MS AL extension already handles document sync; our wrapper only needs
+	// on-demand file access via EnsureFileOpened. Set via --vscode flag.
+	VSCodeMode bool
+
 	// AL LSP process
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -740,6 +746,17 @@ func (w *ALLSPWrapper) addExtraCapabilities(result json.RawMessage) json.RawMess
 	// NullReferenceException, causing 30s timeouts. The MS AL extension handles
 	// semantic tokens directly when present.
 	delete(caps, "semanticTokensProvider")
+
+	// In VS Code mode, disable document sync so the LanguageClient won't send
+	// didOpen/didChange/didClose. This prevents interference when other extensions
+	// (like AL Test Runner) bulk-open files, which would trigger our AL LSP
+	// instance to process them and potentially conflict with the MS AL extension.
+	// Our tools use EnsureFileOpened for on-demand access — no auto-sync needed.
+	// See: https://github.com/SShadowS/al-lsp-for-agents/issues/17
+	if w.VSCodeMode {
+		caps["textDocumentSync"] = 0 // TextDocumentSyncKind.None
+		w.Log("VS Code mode: disabled textDocumentSync (tools use EnsureFileOpened)")
+	}
 
 	w.Log("Modified server capabilities: added codeLens+callHierarchy, removed executeCommand+semanticTokens")
 

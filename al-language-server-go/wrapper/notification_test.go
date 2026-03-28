@@ -198,6 +198,70 @@ func TestHandleMessage_NonDocumentNotification_NoTracking(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Tests for VSCodeMode capability override
+// ---------------------------------------------------------------------------
+
+func TestAddExtraCapabilities_VSCodeMode_DisablesSync(t *testing.T) {
+	w := New()
+	w.VSCodeMode = true
+
+	// Minimal initialize result with textDocumentSync from the AL LSP
+	input := json.RawMessage(`{"capabilities":{"textDocumentSync":{"openClose":true,"change":2}}}`)
+
+	result := w.addExtraCapabilities(input)
+
+	var parsed struct {
+		Capabilities struct {
+			TextDocumentSync interface{} `json:"textDocumentSync"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("Failed to parse result: %v", err)
+	}
+
+	// Should be 0 (TextDocumentSyncKind.None), not the original object
+	syncValue, ok := parsed.Capabilities.TextDocumentSync.(float64)
+	if !ok {
+		t.Fatalf("textDocumentSync should be a number, got %T: %v",
+			parsed.Capabilities.TextDocumentSync, parsed.Capabilities.TextDocumentSync)
+	}
+	if syncValue != 0 {
+		t.Errorf("textDocumentSync should be 0 (None), got %v", syncValue)
+	}
+}
+
+func TestAddExtraCapabilities_NormalMode_PreservesSync(t *testing.T) {
+	w := New()
+	w.VSCodeMode = false
+
+	input := json.RawMessage(`{"capabilities":{"textDocumentSync":{"openClose":true,"change":2}}}`)
+
+	result := w.addExtraCapabilities(input)
+
+	var parsed struct {
+		Capabilities struct {
+			TextDocumentSync interface{} `json:"textDocumentSync"`
+		} `json:"capabilities"`
+	}
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("Failed to parse result: %v", err)
+	}
+
+	// Should remain an object (not overridden to 0)
+	if _, ok := parsed.Capabilities.TextDocumentSync.(float64); ok {
+		t.Error("textDocumentSync should NOT be overridden in normal mode")
+	}
+
+	syncMap, ok := parsed.Capabilities.TextDocumentSync.(map[string]interface{})
+	if !ok {
+		t.Fatalf("textDocumentSync should remain an object, got %T", parsed.Capabilities.TextDocumentSync)
+	}
+	if syncMap["openClose"] != true {
+		t.Error("openClose should still be true")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Tests for extractTextDocumentURI
 // ---------------------------------------------------------------------------
 
