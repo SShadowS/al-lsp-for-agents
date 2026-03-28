@@ -564,6 +564,26 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 		}
 		w.SendNotificationToLSP(msg.Method, params)
 
+		// Track file open/close state so EnsureFileOpened doesn't send
+		// duplicate didOpen to the AL LSP. Without this, VS Code's
+		// LanguageClient sends didOpen (forwarded here) but openedFiles
+		// isn't updated, so a later tool invocation sends it again.
+		// See: https://github.com/SShadowS/al-lsp-for-agents/issues/17
+		switch msg.Method {
+		case "textDocument/didOpen":
+			if uri := extractTextDocumentURI(msg.Params); uri != "" {
+				if path, err := FileURIToPath(uri); err == nil {
+					w.openedFiles[NormalizePath(path)] = true
+				}
+			}
+		case "textDocument/didClose":
+			if uri := extractTextDocumentURI(msg.Params); uri != "" {
+				if path, err := FileURIToPath(uri); err == nil {
+					delete(w.openedFiles, NormalizePath(path))
+				}
+			}
+		}
+
 		// Also forward document events to call hierarchy server
 		if w.callHierarchyServer != nil && w.callHierarchyServer.IsInitialized() {
 			switch msg.Method {
@@ -858,6 +878,20 @@ func (w *ALLSPWrapper) writeToLSP(msg *Message) error {
 	w.stdinMu.Lock()
 	defer w.stdinMu.Unlock()
 	return WriteMessage(w.stdin, msg)
+}
+
+// extractTextDocumentURI extracts the textDocument.uri from raw JSON-RPC params.
+// Used for didOpen/didClose/didChange/didSave notifications.
+func extractTextDocumentURI(params json.RawMessage) string {
+	var p struct {
+		TextDocument struct {
+			URI string `json:"uri"`
+		} `json:"textDocument"`
+	}
+	if json.Unmarshal(params, &p) == nil {
+		return p.TextDocument.URI
+	}
+	return ""
 }
 
 // GetManifest returns the cached manifest for a project root, or parses app.json fresh
