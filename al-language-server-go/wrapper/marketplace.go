@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const (
@@ -90,7 +91,8 @@ func queryMarketplace() (marketplaceResponse, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json;api-version=6.0-preview.1")
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return marketplaceResponse{}, fmt.Errorf("marketplace request failed: %w", err)
 	}

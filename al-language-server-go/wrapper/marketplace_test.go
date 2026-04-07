@@ -65,7 +65,9 @@ func TestParseMarketplaceResponse_Prerelease(t *testing.T) {
 	}`
 
 	var resp marketplaceResponse
-	json.Unmarshal([]byte(responseJSON), &resp)
+	if err := json.Unmarshal([]byte(responseJSON), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
 
 	version, err := findLatestVersion(resp, "prerelease")
 	if err != nil {
@@ -93,7 +95,9 @@ func TestParseMarketplaceResponse_NoMatchingChannel(t *testing.T) {
 	}`
 
 	var resp marketplaceResponse
-	json.Unmarshal([]byte(responseJSON), &resp)
+	if err := json.Unmarshal([]byte(responseJSON), &resp); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
 
 	_, err := findLatestVersion(resp, "prerelease")
 	if err == nil {
