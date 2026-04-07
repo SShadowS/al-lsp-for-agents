@@ -36,6 +36,13 @@ func extractVsix(vsixPath, targetDir string) error {
 
 		targetPath := filepath.Join(targetDir, filepath.FromSlash(relPath))
 
+		// Zip slip guard: ensure extracted path stays within targetDir
+		cleanTarget := filepath.Clean(targetPath) + string(os.PathSeparator)
+		cleanBase := filepath.Clean(targetDir) + string(os.PathSeparator)
+		if !strings.HasPrefix(cleanTarget, cleanBase) {
+			return fmt.Errorf("illegal path in vsix: %s", f.Name)
+		}
+
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(targetPath, 0755)
 			continue

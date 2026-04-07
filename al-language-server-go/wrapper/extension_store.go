@@ -41,7 +41,7 @@ func (s *ExtensionStore) DownloadAndInstall(channel string, logFn func(string, .
 	// Download
 	cacheDir := s.CacheDir()
 	os.MkdirAll(cacheDir, 0755)
-	vsixPath := filepath.Join(cacheDir, "al-extension.vsix")
+	vsixPath := filepath.Join(cacheDir, fmt.Sprintf("al-extension-%s.vsix", channel))
 
 	url := vspackageURL(version)
 	logFn("Downloading AL extension v%s from marketplace...", version)
