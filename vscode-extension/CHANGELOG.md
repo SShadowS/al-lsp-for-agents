@@ -2,6 +2,13 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.10.0] - 2026-04-07
+
+### Added
+- **Auto-download AL Language extension** -- the wrapper can now automatically download and manage the Microsoft AL Language extension from the VS Code Marketplace, enabling use in environments without VS Code (Sublime Text, standalone). Controlled via `--auto-download-al-extension` flag.
+- **Release channel selection** -- choose between release and prerelease versions of the AL extension with `--al-extension-channel release|prerelease`.
+- **Background update checks** -- when auto-download is enabled, the wrapper checks for extension updates once per day in the background. Use `--force-update-al-extension` to update immediately.
+
 ## [1.9.9] - 2026-03-28
 
 ### Fixed
