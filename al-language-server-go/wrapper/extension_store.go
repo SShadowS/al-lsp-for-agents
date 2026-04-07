@@ -68,6 +68,10 @@ func (s *ExtensionStore) ReadMetadata(channel string) (*ExtensionMetadata, error
 
 // WriteMetadata writes the metadata file for a channel
 func (s *ExtensionStore) WriteMetadata(channel string, meta *ExtensionMetadata) error {
+	if err := os.MkdirAll(s.ChannelDir(channel), 0755); err != nil {
+		return fmt.Errorf("failed to create channel directory: %w", err)
+	}
+
 	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
