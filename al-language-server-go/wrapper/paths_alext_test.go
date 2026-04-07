@@ -6,7 +6,7 @@ import (
 )
 
 func TestResolveALExtensionPath_ExplicitFlag(t *testing.T) {
-	path, err := ResolveALExtensionPath("/explicit/path/to/al-extension")
+	path, err := ResolveALExtensionPath("/explicit/path/to/al-extension", false, "release")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -19,7 +19,7 @@ func TestResolveALExtensionPath_EnvVar(t *testing.T) {
 	os.Setenv("AL_EXTENSION_PATH", "/env/path/to/al-extension")
 	defer os.Unsetenv("AL_EXTENSION_PATH")
 
-	path, err := ResolveALExtensionPath("")
+	path, err := ResolveALExtensionPath("", false, "release")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestResolveALExtensionPath_EnvVar(t *testing.T) {
 
 func TestResolveALExtensionPath_EmptyFallsBackToDiscovery(t *testing.T) {
 	os.Unsetenv("AL_EXTENSION_PATH")
-	_, err := ResolveALExtensionPath("")
+	_, err := ResolveALExtensionPath("", false, "release")
 	if err == nil {
 		t.Log("AL extension found via auto-discovery (test machine has it installed)")
 	}

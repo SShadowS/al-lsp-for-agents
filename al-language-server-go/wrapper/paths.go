@@ -238,11 +238,9 @@ func ExtractSymbolFromPath(query string) string {
 	return query
 }
 
-// ResolveALExtensionPath resolves the AL extension path using this priority:
-// 1. Explicit path from --al-extension-path flag (if non-empty)
-// 2. AL_EXTENSION_PATH environment variable (if set)
-// 3. Auto-discovery via FindALExtension()
-func ResolveALExtensionPath(explicitPath string) (string, error) {
+// resolveALExtensionPathWithHome is the internal implementation for testing.
+// Priority: 1. explicit path, 2. env var, 3. VS Code auto-discovery, 4. downloaded extension
+func resolveALExtensionPathWithHome(explicitPath, home string, autoDownload bool, channel string) (string, error) {
 	if explicitPath != "" {
 		return explicitPath, nil
 	}
@@ -251,7 +249,36 @@ func ResolveALExtensionPath(explicitPath string) (string, error) {
 		return envPath, nil
 	}
 
-	return FindALExtension()
+	// Tier 3: VS Code auto-discovery
+	if path, err := findALExtensionInHome(home); err == nil {
+		return path, nil
+	}
+
+	// Tier 4: Downloaded extension (only if auto-download is enabled)
+	if autoDownload {
+		store := NewExtensionStore(home)
+		if path, err := store.ExtensionPath(channel); err == nil {
+			return path, nil
+		}
+	}
+
+	if autoDownload {
+		return "", fmt.Errorf("AL extension not found. Use --force-update-al-extension to download it")
+	}
+	return "", fmt.Errorf("AL extension not found. Install it in VS Code, set --al-extension-path, or use --auto-download-al-extension to download it automatically")
+}
+
+// ResolveALExtensionPath resolves the AL extension path using this priority:
+// 1. Explicit path from --al-extension-path flag (if non-empty)
+// 2. AL_EXTENSION_PATH environment variable (if set)
+// 3. Auto-discovery via FindALExtension()
+// 4. Downloaded extension (if autoDownload is true)
+func ResolveALExtensionPath(explicitPath string, autoDownload bool, channel string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return resolveALExtensionPathWithHome(explicitPath, home, autoDownload, channel)
 }
 
 // IsALFile checks if a file is an AL file based on extension

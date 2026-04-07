@@ -237,6 +237,87 @@ func TestFindALExtension_VersionSortingEdgeCases(t *testing.T) {
 	}
 }
 
+func TestResolveALExtensionPath_DownloadedExtension(t *testing.T) {
+	tmpHome := t.TempDir()
+
+	// Create a downloaded extension in ~/.al-language-server/extensions/release/
+	store := NewExtensionStore(tmpHome)
+	channelDir := store.ChannelDir("release")
+	extDir := filepath.Join(channelDir, "ms-dynamics-smb.al-18.0.2190758")
+	os.MkdirAll(extDir, 0755)
+
+	meta := &ExtensionMetadata{
+		Version:      "18.0.2190758",
+		Channel:      "release",
+		ExtensionDir: "ms-dynamics-smb.al-18.0.2190758",
+	}
+	store.WriteMetadata("release", meta)
+
+	// No VS Code dirs exist, no explicit path, no env var
+	// Tier 4 should find the downloaded extension
+	path, err := resolveALExtensionPathWithHome("", tmpHome, true, "release")
+	if err != nil {
+		t.Fatalf("Expected to find downloaded extension, got error: %v", err)
+	}
+
+	if path != extDir {
+		t.Errorf("Expected %s, got %s", extDir, path)
+	}
+}
+
+func TestResolveALExtensionPath_VSCodeWinsOverDownloaded(t *testing.T) {
+	tmpHome := t.TempDir()
+
+	// Create a VS Code extension (tier 3)
+	vscodeExt := createTestExtension(t, tmpHome, ".vscode", "17.0.100")
+
+	// Create a downloaded extension (tier 4)
+	store := NewExtensionStore(tmpHome)
+	channelDir := store.ChannelDir("release")
+	extDir := filepath.Join(channelDir, "ms-dynamics-smb.al-18.0.2190758")
+	os.MkdirAll(extDir, 0755)
+	meta := &ExtensionMetadata{
+		Version:      "18.0.2190758",
+		Channel:      "release",
+		ExtensionDir: "ms-dynamics-smb.al-18.0.2190758",
+	}
+	store.WriteMetadata("release", meta)
+
+	// Tier 3 (VS Code) should win
+	path, err := resolveALExtensionPathWithHome("", tmpHome, true, "release")
+	if err != nil {
+		t.Fatalf("Expected to find extension, got error: %v", err)
+	}
+
+	if path != vscodeExt {
+		t.Errorf("Expected VS Code path %s, got %s", vscodeExt, path)
+	}
+	_ = extDir // suppress unused
+}
+
+func TestResolveALExtensionPath_AutoDownloadDisabled(t *testing.T) {
+	tmpHome := t.TempDir()
+
+	// Create a downloaded extension (tier 4)
+	store := NewExtensionStore(tmpHome)
+	channelDir := store.ChannelDir("release")
+	extDir := filepath.Join(channelDir, "ms-dynamics-smb.al-18.0.2190758")
+	os.MkdirAll(extDir, 0755)
+	meta := &ExtensionMetadata{
+		Version:      "18.0.2190758",
+		Channel:      "release",
+		ExtensionDir: "ms-dynamics-smb.al-18.0.2190758",
+	}
+	store.WriteMetadata("release", meta)
+
+	// With auto-download disabled, tier 4 should NOT be checked
+	_, err := resolveALExtensionPathWithHome("", tmpHome, false, "release")
+	if err == nil {
+		t.Fatal("Expected error when auto-download is disabled and no VS Code extension exists")
+	}
+	_ = extDir // suppress unused
+}
+
 func TestVSCodeExtensionDirs_ContainsAllVariants(t *testing.T) {
 	// Verify all expected variants are in the list
 	expectedDirs := map[string]bool{

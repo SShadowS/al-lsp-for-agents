@@ -39,6 +39,18 @@ type ALLSPWrapper struct {
 	// on-demand file access via EnsureFileOpened. Set via --vscode flag.
 	VSCodeMode bool
 
+	// AutoDownloadALExtension enables automatic download of the AL extension
+	// from the VS Code Marketplace. Set via --auto-download-al-extension flag.
+	AutoDownloadALExtension bool
+
+	// ALExtensionChannel selects the release channel ("release" or "prerelease").
+	// Set via --al-extension-channel flag.
+	ALExtensionChannel string
+
+	// ForceUpdateALExtension bypasses the daily update check and downloads
+	// the latest version immediately. Set via --force-update-al-extension flag.
+	ForceUpdateALExtension bool
+
 	// AL LSP process
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -107,8 +119,26 @@ func (w *ALLSPWrapper) Run() error {
 
 	w.Log("AL LSP Wrapper (Go) starting...")
 
-	// Resolve AL extension path (explicit flag > env var > auto-discovery)
-	extensionPath, err := ResolveALExtensionPath(w.ALExtensionPath)
+	channel := w.ALExtensionChannel
+	if channel == "" {
+		channel = "release"
+	}
+
+	// Resolve AL extension path (explicit flag > env var > auto-discovery > downloaded)
+	extensionPath, err := ResolveALExtensionPath(w.ALExtensionPath, w.AutoDownloadALExtension, channel)
+	if err != nil && w.AutoDownloadALExtension {
+		// First run: blocking download
+		w.Log("AL extension not found locally, downloading...")
+		home, homeErr := os.UserHomeDir()
+		if homeErr != nil {
+			return fmt.Errorf("failed to get home directory: %w", homeErr)
+		}
+		store := NewExtensionStore(home)
+		extensionPath, err = store.DownloadAndInstall(channel, w.Log)
+		if err != nil {
+			return fmt.Errorf("failed to download AL extension: %w", err)
+		}
+	}
 	if err != nil {
 		w.Log("Failed to find AL extension: %v", err)
 		return fmt.Errorf("AL extension not found: %w", err)
@@ -152,6 +182,25 @@ func (w *ALLSPWrapper) Run() error {
 
 	// Add to Windows job object for automatic cleanup on parent exit
 	addProcessToJob(w.cmd.Process)
+
+	// Background update check (non-blocking)
+	if w.AutoDownloadALExtension {
+		go func() {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				w.Log("Warning: cannot check for updates: %v", err)
+				return
+			}
+			store := NewExtensionStore(home)
+
+			if w.ForceUpdateALExtension || store.NeedsUpdateCheck(channel) {
+				newVersion := store.CheckAndUpdate(channel, w.Log)
+				if newVersion != "" {
+					w.Log("AL extension updated to v%s — restart to use new version", newVersion)
+				}
+			}
+		}()
+	}
 
 	// Setup client communication
 	w.clientReader = bufio.NewReader(os.Stdin)

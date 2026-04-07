@@ -13,6 +13,9 @@ func main() {
 	dumpClientCaps := flag.Bool("dump-client-caps", false, "Wait for initialize request, extract client capabilities as JSON, then exit")
 	alExtensionPath := flag.String("al-extension-path", "", "Path to the MS AL extension directory (skips auto-discovery)")
 	vscodeMode := flag.Bool("vscode", false, "VS Code mode: disable textDocumentSync to prevent interference with other extensions")
+	autoDownload := flag.Bool("auto-download-al-extension", false, "Automatically download the AL extension from the VS Code Marketplace")
+	alExtensionChannel := flag.String("al-extension-channel", "release", "AL extension channel: release or prerelease")
+	forceUpdate := flag.Bool("force-update-al-extension", false, "Force download the latest AL extension version")
 	flag.Parse()
 
 	// Handle --dump-client-caps mode
@@ -29,6 +32,9 @@ func main() {
 	w := wrapper.New()
 	w.ALExtensionPath = *alExtensionPath
 	w.VSCodeMode = *vscodeMode
+	w.AutoDownloadALExtension = *autoDownload
+	w.ALExtensionChannel = *alExtensionChannel
+	w.ForceUpdateALExtension = *forceUpdate
 
 	if err := w.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "AL LSP Wrapper error: %v\n", err)
