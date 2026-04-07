@@ -8,6 +8,125 @@ import (
 	"time"
 )
 
+// DownloadAndInstall downloads the AL extension for the given channel and installs it.
+// Returns the extension directory path.
+func (s *ExtensionStore) DownloadAndInstall(channel string, logFn func(string, ...interface{})) (string, error) {
+	logFn("Querying VS Code Marketplace for AL extension (%s channel)...", channel)
+
+	resp, err := queryMarketplace()
+	if err != nil {
+		return "", fmt.Errorf("failed to query marketplace: %w", err)
+	}
+
+	version, err := findLatestVersion(resp, channel)
+	if err != nil {
+		return "", fmt.Errorf("failed to find version: %w", err)
+	}
+
+	logFn("Latest %s version: %s", channel, version)
+
+	// Check if we already have this version
+	meta, metaErr := s.ReadMetadata(channel)
+	if metaErr == nil && meta.Version == version {
+		logFn("Already have version %s, updating check time", version)
+		meta.LastCheckTime = time.Now().UTC()
+		s.WriteMetadata(channel, meta)
+		path, err := s.ExtensionPath(channel)
+		if err == nil {
+			return path, nil
+		}
+		// Fall through to download if directory is missing
+	}
+
+	// Download
+	cacheDir := s.CacheDir()
+	os.MkdirAll(cacheDir, 0755)
+	vsixPath := filepath.Join(cacheDir, "al-extension.vsix")
+
+	url := vspackageURL(version)
+	logFn("Downloading AL extension v%s from marketplace...", version)
+	if err := downloadFile(url, vsixPath); err != nil {
+		return "", fmt.Errorf("failed to download extension: %w", err)
+	}
+
+	// Extract
+	extDirName := fmt.Sprintf("ms-dynamics-smb.al-%s", version)
+	channelDir := s.ChannelDir(channel)
+	targetDir := filepath.Join(channelDir, extDirName)
+
+	// Remove existing extension dir if present (from a previous version)
+	if meta != nil && meta.ExtensionDir != "" && meta.ExtensionDir != extDirName {
+		oldDir := filepath.Join(channelDir, meta.ExtensionDir)
+		logFn("Removing old extension: %s", oldDir)
+		os.RemoveAll(oldDir)
+	}
+
+	os.MkdirAll(channelDir, 0755)
+	logFn("Extracting to %s...", targetDir)
+	if err := extractVsix(vsixPath, targetDir); err != nil {
+		os.RemoveAll(targetDir)
+		return "", fmt.Errorf("failed to extract extension: %w", err)
+	}
+
+	// Write metadata
+	now := time.Now().UTC()
+	newMeta := &ExtensionMetadata{
+		Version:       version,
+		Channel:       channel,
+		LastCheckTime: now,
+		DownloadedAt:  now,
+		ExtensionDir:  extDirName,
+	}
+	if err := s.WriteMetadata(channel, newMeta); err != nil {
+		return "", fmt.Errorf("failed to write metadata: %w", err)
+	}
+
+	// Clean cache
+	s.CleanCache()
+
+	logFn("AL extension v%s (%s) installed successfully", version, channel)
+	return targetDir, nil
+}
+
+// CheckAndUpdate checks for updates and downloads if newer version is available.
+// Returns the installed version string (or empty if no update was needed/available).
+func (s *ExtensionStore) CheckAndUpdate(channel string, logFn func(string, ...interface{})) string {
+	logFn("Checking for AL extension updates (%s channel)...", channel)
+
+	resp, err := queryMarketplace()
+	if err != nil {
+		logFn("Warning: failed to check for updates: %v", err)
+		return ""
+	}
+
+	version, err := findLatestVersion(resp, channel)
+	if err != nil {
+		logFn("Warning: failed to find version: %v", err)
+		return ""
+	}
+
+	meta, err := s.ReadMetadata(channel)
+	if err == nil && meta.Version == version {
+		logFn("AL extension is up to date (v%s)", version)
+		meta.LastCheckTime = time.Now().UTC()
+		s.WriteMetadata(channel, meta)
+		return ""
+	}
+
+	if meta != nil {
+		logFn("New version available: %s -> %s", meta.Version, version)
+	} else {
+		logFn("New version available: %s", version)
+	}
+	_, err = s.DownloadAndInstall(channel, logFn)
+	if err != nil {
+		logFn("Warning: failed to update AL extension: %v", err)
+		return ""
+	}
+
+	return version
+}
+
 const (
 	updateCheckInterval = 24 * time.Hour
 )
