@@ -183,22 +183,27 @@ func (h *DefinitionHandler) Handle(msg *Message, w WrapperInterface) (*Message, 
 		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
 	}
 
-	filePath, err := FileURIToPath(params.TextDocument.URI)
-	if err != nil {
-		w.Log("Failed to convert URI: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, "Invalid file URI")
-	}
+	// Virtual URIs (e.g. al-preview:) are dependency documents managed by the AL LSP
+	if !IsVirtualURI(params.TextDocument.URI) {
+		filePath, err := FileURIToPath(params.TextDocument.URI)
+		if err != nil {
+			w.Log("Failed to convert URI: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, "Invalid file URI")
+		}
 
-	// Ensure the file is opened
-	if err := w.EnsureFileOpened(filePath); err != nil {
-		w.Log("Failed to open file: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
-	}
+		// Ensure the file is opened
+		if err := w.EnsureFileOpened(filePath); err != nil {
+			w.Log("Failed to open file: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
 
-	// Ensure project is initialized
-	if err := w.EnsureProjectInitialized(filePath); err != nil {
-		w.Log("Failed to initialize project: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		// Ensure project is initialized
+		if err := w.EnsureProjectInitialized(filePath); err != nil {
+			w.Log("Failed to initialize project: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
+	} else {
+		w.Log("Virtual URI detected, forwarding directly: %s", params.TextDocument.URI)
 	}
 
 	// Transform to AL-specific command
@@ -391,22 +396,27 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
 	}
 
-	filePath, err := FileURIToPath(params.TextDocument.URI)
-	if err != nil {
-		w.Log("Failed to convert URI: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, "Invalid file URI")
-	}
+	// Virtual URIs (e.g. al-preview:) are dependency documents managed by the AL LSP
+	if !IsVirtualURI(params.TextDocument.URI) {
+		filePath, err := FileURIToPath(params.TextDocument.URI)
+		if err != nil {
+			w.Log("Failed to convert URI: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, "Invalid file URI")
+		}
 
-	// Ensure the file is opened
-	if err := w.EnsureFileOpened(filePath); err != nil {
-		w.Log("Failed to open file: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
-	}
+		// Ensure the file is opened
+		if err := w.EnsureFileOpened(filePath); err != nil {
+			w.Log("Failed to open file: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
 
-	// Ensure project is initialized
-	if err := w.EnsureProjectInitialized(filePath); err != nil {
-		w.Log("Failed to initialize project: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		// Ensure project is initialized
+		if err := w.EnsureProjectInitialized(filePath); err != nil {
+			w.Log("Failed to initialize project: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
+	} else {
+		w.Log("Virtual URI detected, forwarding directly: %s", params.TextDocument.URI)
 	}
 
 	// Forward to AL LSP
@@ -596,22 +606,27 @@ func (h *DocumentSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Messa
 		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
 	}
 
-	filePath, err := FileURIToPath(params.TextDocument.URI)
-	if err != nil {
-		w.Log("Failed to convert URI: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, "Invalid file URI")
-	}
+	// Virtual URIs (e.g. al-preview:) are dependency documents managed by the AL LSP
+	if !IsVirtualURI(params.TextDocument.URI) {
+		filePath, err := FileURIToPath(params.TextDocument.URI)
+		if err != nil {
+			w.Log("Failed to convert URI: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, "Invalid file URI")
+		}
 
-	// Ensure the file is opened
-	if err := w.EnsureFileOpened(filePath); err != nil {
-		w.Log("Failed to open file: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
-	}
+		// Ensure the file is opened
+		if err := w.EnsureFileOpened(filePath); err != nil {
+			w.Log("Failed to open file: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
 
-	// Ensure project is initialized
-	if err := w.EnsureProjectInitialized(filePath); err != nil {
-		w.Log("Failed to initialize project: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		// Ensure project is initialized
+		if err := w.EnsureProjectInitialized(filePath); err != nil {
+			w.Log("Failed to initialize project: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
+	} else {
+		w.Log("Virtual URI detected, forwarding directly: %s", params.TextDocument.URI)
 	}
 
 	// Forward to AL LSP
@@ -753,22 +768,27 @@ func (h *ReferencesHandler) Handle(msg *Message, w WrapperInterface) (*Message, 
 		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
 	}
 
-	filePath, err := FileURIToPath(params.TextDocument.URI)
-	if err != nil {
-		w.Log("Failed to convert URI: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, "Invalid file URI")
-	}
+	// Virtual URIs (e.g. al-preview:) are dependency documents managed by the AL LSP
+	if !IsVirtualURI(params.TextDocument.URI) {
+		filePath, err := FileURIToPath(params.TextDocument.URI)
+		if err != nil {
+			w.Log("Failed to convert URI: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, "Invalid file URI")
+		}
 
-	// Ensure the file is opened
-	if err := w.EnsureFileOpened(filePath); err != nil {
-		w.Log("Failed to open file: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
-	}
+		// Ensure the file is opened
+		if err := w.EnsureFileOpened(filePath); err != nil {
+			w.Log("Failed to open file: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
 
-	// Ensure project is initialized
-	if err := w.EnsureProjectInitialized(filePath); err != nil {
-		w.Log("Failed to initialize project: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		// Ensure project is initialized
+		if err := w.EnsureProjectInitialized(filePath); err != nil {
+			w.Log("Failed to initialize project: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
+	} else {
+		w.Log("Virtual URI detected, forwarding directly: %s", params.TextDocument.URI)
 	}
 
 	// Forward to AL LSP

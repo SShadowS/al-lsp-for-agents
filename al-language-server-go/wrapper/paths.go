@@ -117,6 +117,25 @@ func GetALLSPExecutable(extensionPath string) string {
 	return filepath.Join(extensionPath, "bin", binDir, executable)
 }
 
+// IsVirtualURI returns true if the URI uses a non-file scheme (e.g. al-preview:)
+// that represents a virtual document managed by the AL LSP, not a file on disk.
+func IsVirtualURI(uri string) bool {
+	if uri == "" || strings.HasPrefix(uri, "file://") {
+		return false
+	}
+	// Check for scheme:path pattern, but exclude Windows drive letters (C:\)
+	idx := strings.Index(uri, ":")
+	if idx <= 0 {
+		return false
+	}
+	// Windows drive letter: single char before colon followed by \ or /
+	if idx == 1 {
+		return false
+	}
+	// Has a multi-char scheme prefix — this is a virtual URI
+	return true
+}
+
 // FileURIToPath converts a file:// URI to a local file path
 func FileURIToPath(uri string) (string, error) {
 	if !strings.HasPrefix(uri, "file://") {

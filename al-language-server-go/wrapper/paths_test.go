@@ -318,6 +318,30 @@ func TestResolveALExtensionPath_AutoDownloadDisabled(t *testing.T) {
 	_ = extDir // suppress unused
 }
 
+func TestIsVirtualURI(t *testing.T) {
+	tests := []struct {
+		uri      string
+		expected bool
+	}{
+		{"al-preview:/allang/SomeApp/Codeunit/123/MyCodeunit.dal", true},
+		{"al-preview:/allang/Continia LLM Azure OpenAI/Codeunit/7761/AOAI Chat Completion Params.dal", true},
+		{"file:///c:/projects/myapp/src/MyCodeunit.al", false},
+		{"file:///home/user/projects/myapp/src/MyCodeunit.al", false},
+		{"C:\\projects\\myapp\\src\\MyCodeunit.al", false},
+		{"/home/user/projects/myapp/src/MyCodeunit.al", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.uri, func(t *testing.T) {
+			result := IsVirtualURI(tt.uri)
+			if result != tt.expected {
+				t.Errorf("IsVirtualURI(%q) = %v, want %v", tt.uri, result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestVSCodeExtensionDirs_ContainsAllVariants(t *testing.T) {
 	// Verify all expected variants are in the list
 	expectedDirs := map[string]bool{
