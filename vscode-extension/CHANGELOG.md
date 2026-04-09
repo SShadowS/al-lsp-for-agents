@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.10.1] - 2026-04-08
+
+### Fixed
+- **Virtual URI handling for dependency apps** -- LSP operations (definition, hover, documentSymbol, references) now work on files from dependency .app packages that use `al-preview:` URIs, instead of failing with "File does not exist".
+
 ## [1.10.0] - 2026-04-07
 
 ### Added
