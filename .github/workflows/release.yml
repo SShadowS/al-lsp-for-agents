@@ -36,7 +36,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -ldflags="-s -w" -o ../al-lsp-wrapper${{ matrix.ext }} .
+        run: go build -trimpath -ldflags="-s -w" -o ../al-lsp-wrapper${{ matrix.ext }} .
 
       # Downloads the exact asset name from al-call-hierarchy releases
       # Note: al-call-hierarchy must be a public repo for github.token to work

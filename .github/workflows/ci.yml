@@ -28,14 +28,14 @@ jobs:
         env:
           GOOS: windows
           GOARCH: amd64
-        run: go build -ldflags="-s -w" -o /tmp/al-lsp-wrapper.exe .
+        run: go build -trimpath -ldflags="-s -w" -o /tmp/al-lsp-wrapper.exe .
 
       - name: Build Linux
         working-directory: al-language-server-go
         env:
           GOOS: linux
           GOARCH: amd64
-        run: go build -ldflags="-s -w" -o /tmp/al-lsp-wrapper .
+        run: go build -trimpath -ldflags="-s -w" -o /tmp/al-lsp-wrapper .
 
   build-vscode:
     runs-on: ubuntu-latest

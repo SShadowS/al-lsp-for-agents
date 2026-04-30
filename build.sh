@@ -114,11 +114,11 @@ if [ "$SKIP_GO" = false ]; then
     cd "$SCRIPT_DIR/al-language-server-go"
 
     echo "Building for Windows..."
-    go build -ldflags="-s -w" -o ../al-language-server-go-windows/bin/al-lsp-wrapper.exe .
+    go build -trimpath -ldflags="-s -w" -o ../al-language-server-go-windows/bin/al-lsp-wrapper.exe .
     echo "  -> al-language-server-go-windows/bin/"
 
     echo "Building for Linux..."
-    GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../al-language-server-go-linux/bin/al-lsp-wrapper .
+    GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../al-language-server-go-linux/bin/al-lsp-wrapper .
     chmod +x ../al-language-server-go-linux/bin/al-lsp-wrapper
     git -C "$SCRIPT_DIR" update-index --chmod=+x al-language-server-go-linux/bin/al-lsp-wrapper
     echo "  -> al-language-server-go-linux/bin/ (with +x)"
