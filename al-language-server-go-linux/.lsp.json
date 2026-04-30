@@ -1,7 +1,7 @@
 {
   "al": {
     "command": "${CLAUDE_PLUGIN_ROOT}/bin/al-lsp-wrapper",
-    "args": [],
+    "args": ["--launcher", "claude-code"],
     "extensionToLanguage": {
       ".al": "al",
       ".dal": "al"

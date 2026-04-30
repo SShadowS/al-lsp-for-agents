@@ -3,7 +3,6 @@ package wrapper
 import (
 	"bufio"
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,6 +49,12 @@ type ALLSPWrapper struct {
 	// ForceUpdateALExtension bypasses the daily update check and downloads
 	// the latest version immediately. Set via --force-update-al-extension flag.
 	ForceUpdateALExtension bool
+
+	// Launcher identifies the client that launched the wrapper: "vscode",
+	// "claude-code", or "" (unknown). Used in duplicate-instance warnings to
+	// tell users exactly which two clients have spawned conflicting wrappers.
+	// Set via --launcher flag.
+	Launcher string
 
 	// AL LSP process
 	cmd    *exec.Cmd
@@ -409,12 +414,48 @@ func (w *ALLSPWrapper) readFromLSP() error {
 		} else if msg.IsNotification() {
 			// Forward notifications to client
 			w.Log("Forwarding notification to client: %s", msg.Method)
+			if msg.Method == "textDocument/publishDiagnostics" {
+				w.logPublishDiagnostics(msg.Params)
+			}
 			if err := WriteMessage(w.clientWriter, msg); err != nil {
 				w.Log("Error forwarding notification: %v", err)
 			}
 		} else {
 			w.Log("WARNING: Unclassified message from AL LSP: method=%s id=%s", msg.Method, msg.GetIDString())
 		}
+	}
+}
+
+// logPublishDiagnostics logs diagnostic details emitted by the AL LSP.
+// Used to investigate issues #15/#17: is the AL LSP producing "already
+// declared" errors that leak through to the client?
+func (w *ALLSPWrapper) logPublishDiagnostics(params json.RawMessage) {
+	var pd struct {
+		URI         string `json:"uri"`
+		Diagnostics []struct {
+			Severity int    `json:"severity"`
+			Source   string `json:"source"`
+			Code     any    `json:"code"`
+			Message  string `json:"message"`
+			Range    struct {
+				Start struct {
+					Line int `json:"line"`
+				} `json:"start"`
+			} `json:"range"`
+		} `json:"diagnostics"`
+	}
+	if err := json.Unmarshal(params, &pd); err != nil {
+		w.Log("  [publishDiagnostics] parse error: %v", err)
+		return
+	}
+	w.Log("  [publishDiagnostics] uri=%s count=%d", pd.URI, len(pd.Diagnostics))
+	for _, d := range pd.Diagnostics {
+		msg := d.Message
+		if len(msg) > 200 {
+			msg = msg[:200]
+		}
+		w.Log("    sev=%d source=%q code=%v line=%d msg=%q",
+			d.Severity, d.Source, d.Code, d.Range.Start.Line+1, msg)
 	}
 }
 
@@ -818,51 +859,196 @@ func (w *ALLSPWrapper) addExtraCapabilities(result json.RawMessage) json.RawMess
 	return modifiedResult
 }
 
-// checkDuplicateInstance checks if another wrapper is already running for the
-// same workspace. If so, sends a warning to the client via window/showMessage.
+// checkDuplicateInstance detects whether another al-lsp-wrapper instance is
+// already serving this workspace and, if so, surfaces an explicit warning
+// identifying both clients (VS Code extension, Claude Code plugin, or
+// unidentified). The warning text is built from a fixed launcher matrix so
+// users get actionable guidance without needing to follow up.
+//
+// Detection is hardened against PID reuse by verifying that the recorded
+// PID's live executable is one of the known wrapper binaries; mismatched
+// or vanished PIDs are treated as stale and overwritten.
 func (w *ALLSPWrapper) checkDuplicateInstance() {
 	if w.workspaceRoot == "" {
 		return
 	}
 
-	// Create a workspace-specific lock file in temp
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(NormalizePath(w.workspaceRoot))))[:16]
-	lockPath := filepath.Join(os.TempDir(), fmt.Sprintf("al-lsp-wrapper-%s.pid", hash))
+	lockPath := lockFilePath(w.workspaceRoot)
+	selfPID := os.Getpid()
+	selfExePath, _ := os.Executable()
+	selfExeName := strings.ToLower(filepath.Base(selfExePath))
+	selfParentPID := getParentPid(selfPID)
+	selfParentExe := ""
+	if selfParentPID > 0 {
+		selfParentExe = getProcessExeName(selfParentPID)
+	}
+	selfLauncher := normalizeLauncher(w.Launcher)
 
-	pid := os.Getpid()
-
-	// Check if another instance is running
-	if data, err := os.ReadFile(lockPath); err == nil {
-		if otherPid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && otherPid != pid {
-			if isProcessRunning(otherPid) {
-				w.Log("WARNING: Another AL LSP wrapper (PID %d) is already running for workspace %s", otherPid, w.workspaceRoot)
-				warning := map[string]interface{}{
-					"type":    2, // Warning
-					"message": "AL LSP for Agents: Another instance is already running for this workspace. Having both the VS Code extension and Claude Code plugin active causes duplicate AL Language Servers, which can produce false compiler errors. Disable one of them.",
-				}
-				w.SendNotificationToClient("window/showMessage", warning)
-			}
-		}
+	self := &LockInfo{
+		Version:       lockFileVersion,
+		PID:           selfPID,
+		Launcher:      string(selfLauncher),
+		ExePath:       selfExePath,
+		ExeName:       selfExeName,
+		ParentPID:     selfParentPID,
+		ParentExeName: selfParentExe,
+		StartedAt:     time.Now().UTC().Format(time.RFC3339),
+		WorkspaceRoot: w.workspaceRoot,
 	}
 
-	// Write our PID
-	os.WriteFile(lockPath, []byte(strconv.Itoa(pid)), 0644)
-	w.Log("Lock file written: %s (PID %d)", lockPath, pid)
+	status, other := inspectLockOwner(lockPath, selfPID)
+	switch status {
+	case lockOwnerLive:
+		w.warnAboutDuplicate(self, other)
+	case lockOwnerStale:
+		w.Log("Lock file at %s is stale (PID %d not a live wrapper); overwriting", lockPath, other.PID)
+	}
+
+	if err := writeLockFile(lockPath, self); err != nil {
+		w.Log("WARNING: failed to write lock file %s: %v", lockPath, err)
+		return
+	}
+	w.Log("Lock file written: %s (PID %d, launcher=%q)", lockPath, selfPID, self.Launcher)
 }
 
-// removeLockFile removes the workspace lock file on shutdown
+// warnAboutDuplicate emits a window/showMessage warning describing both
+// wrapper instances. The text is selected from a launcher matrix so the
+// user knows exactly which two clients conflict and how to resolve it.
+func (w *ALLSPWrapper) warnAboutDuplicate(self, other *LockInfo) {
+	msg := buildDuplicateWarning(self, other)
+	w.Log("WARNING: duplicate wrapper detected. self=PID %d launcher=%q | other=PID %d launcher=%q exe=%q parent=%q started=%q",
+		self.PID, self.Launcher, other.PID, other.Launcher, other.ExeName, other.ParentExeName, other.StartedAt)
+	w.SendNotificationToClient("window/showMessage", map[string]interface{}{
+		"type":    2, // Warning
+		"message": msg,
+	})
+}
+
+// buildDuplicateWarning composes the user-facing warning text. The matrix
+// covers every launcher combination so the message is always specific:
+// the user should never need to ask "which two are conflicting?".
+func buildDuplicateWarning(self, other *LockInfo) string {
+	selfID := self.LauncherID()
+	otherID := other.LauncherID()
+
+	// Fallback: when the other instance reports launcher="" but its parent
+	// process clearly identifies it (e.g. spawned by Code.exe), upgrade the
+	// label so the user sees a concrete name instead of "unidentified".
+	otherInferred := otherID
+	if otherInferred == LauncherUnknown {
+		otherInferred = inferLauncherFromParent(other.ParentExeName)
+	}
+
+	otherDesc := describeInstance(other, otherInferred)
+	selfDesc := describeInstance(self, selfID)
+
+	var headline string
+	switch {
+	case selfID == LauncherVSCode && otherInferred == LauncherClaudeCode,
+		selfID == LauncherClaudeCode && otherInferred == LauncherVSCode:
+		headline = "AL LSP for Agents: both the VS Code extension and the Claude Code plugin are running an AL Language Server for this workspace. " +
+			"This produces duplicate diagnostics and can surface false \"already declared\" compiler errors. " +
+			"Keep one and disable the other:\n" +
+			"  - To disable in VS Code: Extensions panel > \"AL LSP for Agents\" > Disable (Workspace).\n" +
+			"  - To disable in Claude Code: run /plugin and uninstall \"al-language-server-go-windows\" or \"al-language-server-go-linux\"."
+	case selfID == LauncherVSCode && otherInferred == LauncherVSCode:
+		headline = "AL LSP for Agents: a second VS Code instance is already running the AL LSP wrapper for this workspace. " +
+			"This usually means you have the same folder open in two VS Code windows (or an old window did not exit cleanly). " +
+			"Close the duplicate VS Code window. If none is visible, end the other wrapper PID listed below from Task Manager."
+	case selfID == LauncherClaudeCode && otherInferred == LauncherClaudeCode:
+		headline = "AL LSP for Agents: a second Claude Code session is already running the AL LSP wrapper for this workspace. " +
+			"This happens if multiple Claude Code instances are open on the same project, or both the production and dev marketplace plugins are installed. " +
+			"Close the duplicate Claude Code session, or run /plugin and disable one of the al-language-server-go-* plugins."
+	case otherInferred == LauncherUnknown:
+		headline = "AL LSP for Agents: another al-lsp-wrapper process is running for this workspace, but its launching client could not be identified. " +
+			"This may be a standalone invocation, an older plugin version that does not pass --launcher, or a leftover process from a crashed editor. " +
+			"Identify the process from the details below and end it before continuing."
+	case selfID == LauncherUnknown:
+		headline = "AL LSP for Agents: this wrapper was launched without a --launcher tag, but another known instance is already running for this workspace. " +
+			"Stop one of them to avoid duplicate AL Language Servers."
+	default:
+		headline = "AL LSP for Agents: another al-lsp-wrapper instance is running for this workspace. Disable one of the launching clients."
+	}
+
+	return headline + "\n\n" +
+		"This instance: " + selfDesc + "\n" +
+		"Other instance: " + otherDesc
+}
+
+// describeInstance formats a single instance for the warning body. Includes
+// the human-readable launcher label, PID, exe path, parent process, and
+// how long it has been running so the user can identify and act on it.
+func describeInstance(info *LockInfo, id LauncherID) string {
+	parts := []string{humanLauncher(id, info.ParentExeName)}
+	parts = append(parts, fmt.Sprintf("PID %d", info.PID))
+	if info.ExePath != "" {
+		parts = append(parts, "exe "+info.ExePath)
+	} else if info.ExeName != "" {
+		parts = append(parts, "exe "+info.ExeName)
+	}
+	if info.ParentExeName != "" && info.ParentPID > 0 {
+		parts = append(parts, fmt.Sprintf("launched by %s (PID %d)", info.ParentExeName, info.ParentPID))
+	}
+	if t := info.startedAtTime(); !t.IsZero() {
+		age := time.Since(t).Round(time.Second)
+		if age < 0 {
+			age = 0
+		}
+		parts = append(parts, fmt.Sprintf("started %s ago", humanDuration(age)))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// inferLauncherFromParent maps a parent process exe name (lowercased) to
+// the most likely launcher. Used when an instance reports launcher="" but
+// we can identify its parent process. Conservative: returns Unknown unless
+// the parent is a clear, well-known editor binary.
+func inferLauncherFromParent(parentExe string) LauncherID {
+	p := strings.ToLower(parentExe)
+	switch {
+	case p == "code.exe" || p == "code" || p == "code-insiders.exe" || p == "code-insiders":
+		return LauncherVSCode
+	case p == "claude.exe" || p == "claude" || strings.HasPrefix(p, "claude-code"):
+		return LauncherClaudeCode
+	default:
+		return LauncherUnknown
+	}
+}
+
+// humanDuration formats a Duration with a single unit (m / h / d) suitable
+// for end-user display. Sub-minute durations show as seconds.
+func humanDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
+	default:
+		days := int(d.Hours()) / 24
+		return fmt.Sprintf("%dd%dh", days, int(d.Hours())%24)
+	}
+}
+
+// removeLockFile removes the workspace lock file on shutdown, but only if
+// it still belongs to this process. This protects against deleting a lock
+// file that a newer wrapper instance has already taken over.
 func (w *ALLSPWrapper) removeLockFile() {
 	if w.workspaceRoot == "" {
 		return
 	}
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(NormalizePath(w.workspaceRoot))))[:16]
-	lockPath := filepath.Join(os.TempDir(), fmt.Sprintf("al-lsp-wrapper-%s.pid", hash))
-	// Only remove if it's our PID
-	if data, err := os.ReadFile(lockPath); err == nil {
-		if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid == os.Getpid() {
-			os.Remove(lockPath)
-			w.Log("Lock file removed: %s", lockPath)
+	lockPath := lockFilePath(w.workspaceRoot)
+	info, err := readLockFile(lockPath)
+	if err != nil {
+		return
+	}
+	if info.PID == os.Getpid() {
+		if err := os.Remove(lockPath); err != nil {
+			w.Log("Failed to remove lock file %s: %v", lockPath, err)
+			return
 		}
+		w.Log("Lock file removed: %s", lockPath)
 	}
 }
 

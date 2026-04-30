@@ -16,6 +16,7 @@ func main() {
 	autoDownload := flag.Bool("auto-download-al-extension", false, "Automatically download the AL extension from the VS Code Marketplace")
 	alExtensionChannel := flag.String("al-extension-channel", "release", "AL extension channel: release or prerelease")
 	forceUpdate := flag.Bool("force-update-al-extension", false, "Force download the latest AL extension version")
+	launcher := flag.String("launcher", "", "Identifies the launching client: 'vscode', 'claude-code', or empty for unknown. Used in duplicate-instance warnings.")
 	flag.Parse()
 
 	// Handle --dump-client-caps mode
@@ -35,6 +36,7 @@ func main() {
 	w.AutoDownloadALExtension = *autoDownload
 	w.ALExtensionChannel = *alExtensionChannel
 	w.ForceUpdateALExtension = *forceUpdate
+	w.Launcher = *launcher
 
 	if err := w.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "AL LSP Wrapper error: %v\n", err)

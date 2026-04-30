@@ -84,7 +84,7 @@ export async function activate(context: vscode.ExtensionContext) {
     process.platform === "win32" ? "al-lsp-wrapper.exe" : "al-lsp-wrapper";
   const serverPath = path.join(context.extensionPath, "bin", binName);
 
-  const args: string[] = ["--vscode"];
+  const args: string[] = ["--launcher", "vscode", "--vscode"];
   if (alExtensionPath) {
     args.push("--al-extension-path", alExtensionPath);
   }
