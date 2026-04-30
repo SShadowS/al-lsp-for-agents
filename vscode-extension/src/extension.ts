@@ -137,9 +137,9 @@ export async function activate(context: vscode.ExtensionContext) {
         // The MS AL extension handles all compiler diagnostics — showing
         // compiler diagnostics from our second AL LSP instance would cause
         // duplicates or false "already declared" errors (issue #15).
-        const enabled = vscode.workspace
-          .getConfiguration("alLspForAgents")
-          .get<boolean>("enableCodeQualityDiagnostics", false);
+        const cfg = vscode.workspace.getConfiguration("alLspForAgents");
+        const enabled = cfg.get<boolean>("enableCodeQualityDiagnostics", false);
+        const verbose = cfg.get<boolean>("verboseDiagnosticLogging", false);
 
         // Log what we receive and filter for debugging (issue #15)
         const compiler = diagnostics.filter(
@@ -153,6 +153,31 @@ export async function activate(context: vscode.ExtensionContext) {
           log?.appendLine(
             `[diag] ${file}: ${compiler.length} compiler (blocked), ${codeQuality.length} code-quality (${enabled ? "shown" : "hidden"})`
           );
+        }
+
+        // Verbose per-diagnostic dump for issue #15/#17 investigation
+        if (verbose && diagnostics.length > 0) {
+          const sevName = (s: vscode.DiagnosticSeverity | undefined) => {
+            switch (s) {
+              case vscode.DiagnosticSeverity.Error: return "Error";
+              case vscode.DiagnosticSeverity.Warning: return "Warning";
+              case vscode.DiagnosticSeverity.Information: return "Info";
+              case vscode.DiagnosticSeverity.Hint: return "Hint";
+              default: return "?";
+            }
+          };
+          log?.appendLine(`[diag-verbose] uri=${_uri.toString()}`);
+          for (const d of diagnostics) {
+            const codeStr =
+              typeof d.code === "object" && d.code !== null
+                ? String((d.code as { value: string | number }).value)
+                : String(d.code ?? "");
+            const msg = d.message.replace(/\r?\n/g, " ").slice(0, 200);
+            log?.appendLine(
+              `  [${sevName(d.severity)}] source=${d.source ?? "<none>"} code=${codeStr} ` +
+                `line=${d.range.start.line + 1} msg="${msg}"`
+            );
+          }
         }
 
         if (enabled) {

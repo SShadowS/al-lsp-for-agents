@@ -375,6 +375,11 @@
           "type": "boolean",
           "default": false,
           "description": "Show code quality diagnostics from al-call-hierarchy in the editor (unused procedures, high complexity, too many parameters, high fan-in, long methods). Disabled by default — enable to see inline warnings."
+        },
+        "alLspForAgents.verboseDiagnosticLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Debug: log every diagnostic received by the middleware (source, code, severity, message). Used to investigate issue #15/#17. Enable, reproduce the bug, then copy the 'AL LSP for Agents' output channel."
         }
       }
     }
