@@ -2,6 +2,18 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.10.2] - 2026-04-30
+
+### Fixed
+- **Misleading "Another instance is already running" warning** -- the duplicate-instance detector now identifies which two clients spawned conflicting wrappers (VS Code extension, Claude Code plugin, or unidentified) and gives concrete steps to disable each. PID-reuse false positives are eliminated by verifying the live process is actually `al-lsp-wrapper`. Lock file format upgraded to JSON with backwards-compatible reads of legacy raw-PID files. (#18)
+
+### Added
+- **`alLspForAgents.verboseDiagnosticLogging` setting** -- when enabled, the middleware dumps every diagnostic (source, code, severity, line, message) to the output channel for investigating issues #15/#17.
+
+### Changed
+- Updated al-call-hierarchy to v0.6.0 (V2 grammar follow-up: expanded LSP surface, parser refinements).
+- Build uses `-trimpath` for reproducible binaries.
+
 ## [1.10.1] - 2026-04-08
 
 ### Fixed
