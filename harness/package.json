@@ -1,0 +1,21 @@
+{
+  "name": "@al-lsp-for-agents/harness",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch": "tsx scripts/fetch-vsix.ts",
+    "refresh": "tsx scripts/refresh-lock.ts",
+    "test:unit": "mocha --import tsx 'unit/**/*.test.ts'",
+    "test:cell": "tsx runOneCell.ts",
+    "test:matrix": "tsx runMatrix.ts"
+  },
+  "devDependencies": {
+    "@types/mocha": "10.0.7",
+    "@types/node": "20.14.10",
+    "@vscode/test-electron": "2.4.1",
+    "mocha": "10.7.3",
+    "tsx": "4.19.0",
+    "typescript": "5.6.2"
+  }
+}
