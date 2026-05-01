@@ -169,6 +169,24 @@ describe(`cell: ${CELL_NAME}`, function () {
     }
 
     log(`raw diagnostics count=${raw.length}`);
+    // For bisection / debugging, also capture the human-readable
+    // diagnostic message from the source vscode.Diagnostic objects so
+    // we can see "...declared by the extension 'X'" without recapture.
+    for (const [uri, diags] of allDiags) {
+      for (const diag of diags) {
+        const codeAny = diag.code as
+          | string
+          | number
+          | { value: string | number; target?: unknown }
+          | undefined;
+        const codeStr = typeof codeAny === "object" && codeAny !== null
+          ? String((codeAny as { value: string | number }).value)
+          : String(codeAny ?? "");
+        if (codeStr === "AL0264" || codeStr === "AL0197") {
+          log(`  MSG ${codeStr} @ ${uri}: ${JSON.stringify(diag.message)}`);
+        }
+      }
+    }
     for (const r of raw) {
       log(`  raw: ${r.uri} src=${r.source} code=${JSON.stringify(r.code)} sev=${r.severity}`);
     }

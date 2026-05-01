@@ -3,3 +3,8 @@ out/
 .cache/
 .vscode-test/
 fixture-tmp-*/
+work/
+parked-*/
+# Bisection scratchpad cell — its baseline is mutable (driven by env vars)
+# so should not be tracked.
+baseline/cell-bisect.json

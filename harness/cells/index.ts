@@ -12,6 +12,7 @@ import { cellRealNoWrapper } from "./cell-real-no-wrapper.js";
 import { cellRealNoTr } from "./cell-real-no-tr.js";
 import { cellRealControl } from "./cell-real-control.js";
 import { cellRealIsolatedCache } from "./cell-real-isolated-cache.js";
+import { cellBisect } from "./cell-bisect.js";
 import type { CellConfig } from "../lib/types.js";
 
 export const ALL_CELLS: CellConfig[] = [
@@ -29,6 +30,7 @@ export const ALL_CELLS: CellConfig[] = [
   cellRealNoTr,
   cellRealControl,
   cellRealIsolatedCache,
+  cellBisect,
 ];
 
 export function findCell(name: string): CellConfig {
