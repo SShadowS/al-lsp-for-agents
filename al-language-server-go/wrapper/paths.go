@@ -258,10 +258,14 @@ func ExtractSymbolFromPath(query string) string {
 }
 
 // resolveALExtensionPathWithHome is the internal implementation for testing.
-// Priority: 1. explicit path, 2. env var, 3. VS Code auto-discovery, 4. downloaded extension
+// Priority: 1. explicit path, 2. AL_LSP_ALT_EXT_DIR env var, 3. AL_EXTENSION_PATH env var, 4. VS Code auto-discovery, 5. downloaded extension
 func resolveALExtensionPathWithHome(explicitPath, home string, autoDownload bool, channel string) (string, error) {
 	if explicitPath != "" {
 		return explicitPath, nil
+	}
+
+	if alt := os.Getenv("AL_LSP_ALT_EXT_DIR"); alt != "" {
+		return alt, nil
 	}
 
 	if envPath := os.Getenv("AL_EXTENSION_PATH"); envPath != "" {
@@ -289,9 +293,10 @@ func resolveALExtensionPathWithHome(explicitPath, home string, autoDownload bool
 
 // ResolveALExtensionPath resolves the AL extension path using this priority:
 // 1. Explicit path from --al-extension-path flag (if non-empty)
-// 2. AL_EXTENSION_PATH environment variable (if set)
-// 3. Auto-discovery via FindALExtension()
-// 4. Downloaded extension (if autoDownload is true)
+// 2. AL_LSP_ALT_EXT_DIR environment variable (if set)
+// 3. AL_EXTENSION_PATH environment variable (if set)
+// 4. Auto-discovery via FindALExtension()
+// 5. Downloaded extension (if autoDownload is true)
 func ResolveALExtensionPath(explicitPath string, autoDownload bool, channel string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
