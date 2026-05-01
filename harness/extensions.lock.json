@@ -5,12 +5,12 @@
     {
       "id": "ms-dynamics-smb.al",
       "version": "18.0.2190758",
-      "sha256": ""
+      "sha256": "5a32ca60860f9231861e6fe42b3c349b6cd8f5e54218bdae1c02acd5b956b4cf"
     },
     {
       "id": "jamespearson.al-test-runner",
-      "version": "0.6.10",
-      "sha256": ""
+      "version": "10.16.8",
+      "sha256": "cdf9a0d80643144010439f8ece62c34bf232ec5bc4ee05e9bdd7121bca458b8d"
     }
   ]
 }
