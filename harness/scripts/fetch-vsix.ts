@@ -82,6 +82,10 @@ async function streamUrlToFile(
 ): Promise<void> {
   const tmpPath = `${destination}.partial`;
   await new Promise<void>((resolve, reject) => {
+    const cleanup = (err: Error) => {
+      unlink(tmpPath).catch(() => {});
+      reject(err);
+    };
     const req = request(
       url,
       {
@@ -101,8 +105,9 @@ async function streamUrlToFile(
             return;
           }
           res.resume();
+          const nextUrl = new URL(res.headers.location, url).href;
           streamUrlToFile(
-            res.headers.location,
+            nextUrl,
             destination,
             redirectsRemaining - 1
           ).then(resolve, reject);
@@ -114,14 +119,18 @@ async function streamUrlToFile(
         }
         const file = createWriteStream(tmpPath);
         const encoding = res.headers["content-encoding"];
+        if (encoding && encoding !== "gzip") {
+          cleanup(new Error(`Unsupported content-encoding: ${encoding}`));
+          return;
+        }
         const upstream = encoding === "gzip" ? res.pipe(createGunzip()) : res;
         upstream.pipe(file);
         file.on("finish", () => file.close(() => resolve()));
-        file.on("error", reject);
-        upstream.on("error", reject);
+        file.on("error", cleanup);
+        upstream.on("error", cleanup);
       }
     );
-    req.on("error", reject);
+    req.on("error", cleanup);
     req.end();
   });
   // Atomic rename
