@@ -213,6 +213,40 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showErrorMessage(`AL LSP for Agents: Tool registration failed: ${err}`);
   }
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "alLspForAgents._test_invokeTool",
+      async (toolName: string, params: unknown) => {
+        // Test-only: invokes a registered Language Model Tool by name and
+        // returns its raw result. Intentionally not declared in package.json
+        // so it doesn't appear in the command palette.
+        const lmAny = vscode.lm as unknown as {
+          invokeTool?: (
+            name: string,
+            options: { input: unknown; toolInvocationToken: undefined },
+            token: vscode.CancellationToken
+          ) => Promise<vscode.LanguageModelToolResult>;
+        };
+        if (!lmAny.invokeTool) {
+          throw new Error("vscode.lm.invokeTool not available");
+        }
+        const result = await lmAny.invokeTool.call(
+          vscode.lm,
+          toolName,
+          { input: params, toolInvocationToken: undefined },
+          new vscode.CancellationTokenSource().token
+        );
+        const text = result.content
+          .map((p) => {
+            const part = p as { value?: string };
+            return typeof part.value === "string" ? part.value : "";
+          })
+          .join("");
+        return { value: text };
+      }
+    )
+  );
+
   // Forward workspace folder changes to the AL LS
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders((event) => {
