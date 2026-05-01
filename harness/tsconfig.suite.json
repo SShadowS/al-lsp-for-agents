@@ -1,19 +1,25 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "outDir": "out",
     "rootDir": ".",
-    "types": ["node", "mocha"],
+    "types": ["node", "mocha", "vscode"],
     "lib": ["ES2022"],
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules", "out", ".cache", "suite"]
+  "include": [
+    "suite/**/*.ts",
+    "lib/snapshot.ts",
+    "lib/readiness.ts",
+    "lib/types.ts",
+    "cells/**/*.ts"
+  ],
+  "exclude": ["node_modules", "out", ".cache"]
 }

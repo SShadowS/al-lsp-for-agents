@@ -1,19 +1,19 @@
 import { strict as assert } from "node:assert";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import * as vscode from "vscode";
 import {
   normalizeDiagnostics,
   diagnosticsEqual,
   type RawDiag,
   writeSnapshot,
-} from "../lib/snapshot.js";
-import { QuietPeriodTracker, waitForSettled } from "../lib/readiness.js";
-import { findCell } from "../cells/index.js";
-import type { DiagSnapshot, NormalizedDiag } from "../lib/types.js";
+} from "../lib/snapshot";
+import { QuietPeriodTracker, waitForSettled } from "../lib/readiness";
+import { findCell } from "../cells/index";
+import type { DiagSnapshot, NormalizedDiag } from "../lib/types";
 
-const HARNESS_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
+// __dirname is available in CJS (this file is compiled with module:CommonJS)
+const HARNESS_DIR = dirname(dirname(__dirname));
 
 /**
  * Driver-supplied environment:

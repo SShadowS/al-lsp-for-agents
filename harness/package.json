@@ -7,7 +7,7 @@
     "fetch": "tsx scripts/fetch-vsix.ts",
     "refresh": "tsx scripts/refresh-lock.ts",
     "test:unit": "node --import tsx ./node_modules/mocha/bin/mocha.js 'unit/**/*.test.ts'",
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.suite.json && tsx scripts/post-build.ts",
     "test:cell": "npm run build && tsx runOneCell.ts",
     "test:matrix": "npm run build && tsx runMatrix.ts"
   },
