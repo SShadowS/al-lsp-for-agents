@@ -18,7 +18,7 @@ import {
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, copyFile, rename, stat } from "node:fs/promises";
 import { findCell } from "./cells/index.js";
 import { makeFixtureCopy } from "./lib/fixture.js";
 import { downloadVsix, loadLock, vsixCachePath } from "./scripts/fetch-vsix.js";
@@ -26,6 +26,69 @@ import { downloadVsix, loadLock, vsixCachePath } from "./scripts/fetch-vsix.js";
 const HARNESS_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = dirname(HARNESS_DIR);
 const LOCAL_EXTENSION = join(REPO_ROOT, "vscode-extension");
+const TRACE_PROXY_EXE = join(
+  REPO_ROOT,
+  "al-language-server-go",
+  "cmd",
+  "lsp-trace-proxy",
+  "lsp-trace-proxy.exe"
+);
+
+async function exists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * If HARNESS_BISECT_TRACE=1, swap the AL extension's
+ * Microsoft.Dynamics.Nav.EditorServices.Host.exe with our stdio trace
+ * proxy. The renamed real apphost (.exe.real) still resolves to
+ * Host.dll because the .NET apphost stub embeds the dll path at
+ * publish time. Returns the absolute path to the trace NDJSON file
+ * for the env var, or undefined if tracing is disabled.
+ *
+ * Idempotent: tolerates an existing swap from a prior run.
+ */
+async function maybeInstallTraceProxy(
+  extensionsDir: string,
+  cellName: string
+): Promise<string | undefined> {
+  if (process.env.HARNESS_BISECT_TRACE !== "1") return undefined;
+
+  const entries = await readdir(extensionsDir);
+  const alDir = entries.find((e) => e.startsWith("ms-dynamics-smb.al-"));
+  if (!alDir) {
+    throw new Error(
+      `HARNESS_BISECT_TRACE=1 but no ms-dynamics-smb.al-* in ${extensionsDir}`
+    );
+  }
+  const win32 = join(extensionsDir, alDir, "bin", "win32");
+  const realName = "Microsoft.Dynamics.Nav.EditorServices.Host.exe";
+  const realPath = join(win32, realName);
+  const backupPath = realPath + ".real";
+
+  if (!(await exists(TRACE_PROXY_EXE))) {
+    throw new Error(
+      `lsp-trace-proxy.exe not built at ${TRACE_PROXY_EXE}. Run 'go build ./cmd/lsp-trace-proxy/' in al-language-server-go first.`
+    );
+  }
+
+  if (!(await exists(backupPath))) {
+    if (!(await exists(realPath))) {
+      throw new Error(`expected ${realPath} after install, none found`);
+    }
+    await rename(realPath, backupPath);
+  }
+  await copyFile(TRACE_PROXY_EXE, realPath);
+
+  const tracesDir = join(HARNESS_DIR, "out", "traces");
+  await mkdir(tracesDir, { recursive: true });
+  return join(tracesDir, `${cellName}.ndjson`);
+}
 
 async function main(): Promise<void> {
   const cellName = process.argv[2];
@@ -125,6 +188,8 @@ async function main(): Promise<void> {
     }
   }
 
+  const tracePath = await maybeInstallTraceProxy(extensionsDir, cellName);
+
   // extensionDevelopmentPath is set to LOCAL_EXTENSION ONLY when the
   // cell explicitly requests the local wrapper (via "local:al-lsp-for-
   // agents" in its extensionIds). For cells that don't request the
@@ -146,6 +211,7 @@ async function main(): Promise<void> {
         HARNESS_FIXTURE: fixture.path,
         HARNESS_OUT: outPath,
         HARNESS_BASELINE_MODE: record ? "record" : "compare",
+        ...(tracePath ? { AL_LSP_TRACE_FILE: tracePath } : {}),
       },
       launchArgs: [
         openTarget,

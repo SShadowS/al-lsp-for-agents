@@ -47,3 +47,6 @@ vscode-extension/bin/
 
 # Superpowers planning docs (local)
 docs/superpowers/
+
+# Built binary for the issue-17 stdio trace proxy (build via `go build ./cmd/lsp-trace-proxy/`)
+al-language-server-go/cmd/lsp-trace-proxy/lsp-trace-proxy.exe
