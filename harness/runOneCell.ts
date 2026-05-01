@@ -68,15 +68,14 @@ async function main(): Promise<void> {
   const userDataDir = join(HARNESS_DIR, "out", "user-data", cellName);
   const extensionsDir = join(HARNESS_DIR, "out", "extensions", cellName);
 
-  // extensionDevelopmentPath is set ONLY when the cell explicitly
-  // requests the local wrapper (via "local:al-lsp-for-agents" in
-  // its extensionIds). Setting it for cells that don't request the
-  // wrapper would auto-activate the wrapper via its activationEvents,
-  // contaminating the cell's diagnostic baseline.
-  //
-  // TestOptions requires extensionDevelopmentPath, so when the cell
-  // doesn't request the wrapper, we use HARNESS_DIR (an inert extension
-  // that is never loaded into launchArgs/extensionIds).
+  // extensionDevelopmentPath is set to LOCAL_EXTENSION ONLY when the
+  // cell explicitly requests the local wrapper (via "local:al-lsp-for-
+  // agents" in its extensionIds). For cells that don't request the
+  // wrapper we point it at HARNESS_DIR — that directory has a
+  // package.json without VS Code extension fields (no engines.vscode,
+  // no activationEvents), so VS Code's extension loader ignores it
+  // rather than activating any extension. We can't omit the field:
+  // @vscode/test-electron's TestOptions type marks it required.
   const devPath = extensionDevelopmentPath ?? HARNESS_DIR;
 
   try {
