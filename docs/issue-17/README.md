@@ -151,5 +151,3 @@ overview of the bug.
   pinpointed the URI-casing root cause.
 - `HANDOFF-stdio-proxy.md` — internal handoff doc for the proxy
   build session.
-- `msbug-body.md` — local snapshot of the body filed at
-  `microsoft/AL#8249` (the public issue is the source of truth).
