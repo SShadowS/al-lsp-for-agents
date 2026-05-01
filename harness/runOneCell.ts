@@ -84,6 +84,7 @@ async function main(): Promise<void> {
       extensionDevelopmentPath: devPath,
       extensionTestsPath: join(HARNESS_DIR, "out", "suite", "index.js"),
       extensionTestsEnv: {
+        ...(cell.wrapperEnv ?? {}),
         HARNESS_CELL: cellName,
         HARNESS_FIXTURE: fixture.path,
         HARNESS_OUT: outPath,
