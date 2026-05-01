@@ -6,7 +6,7 @@
   "scripts": {
     "fetch": "tsx scripts/fetch-vsix.ts",
     "refresh": "tsx scripts/refresh-lock.ts",
-    "test:unit": "mocha --import tsx 'unit/**/*.test.ts'",
+    "test:unit": "node --import tsx ./node_modules/mocha/bin/mocha.js 'unit/**/*.test.ts'",
     "test:cell": "tsx runOneCell.ts",
     "test:matrix": "tsx runMatrix.ts"
   },
