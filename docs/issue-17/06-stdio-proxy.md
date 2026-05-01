@@ -10,6 +10,10 @@ The trace produced an unexpected, sharper finding: **the duplicate
 SyntaxTree comes from a path-casing mismatch**, not just from a
 generic FS-vs-didOpen race. Details below.
 
+**Filed upstream as <https://github.com/microsoft/AL/issues/8249>**
+(related to the closed `microsoft/AL#6077`, which fixed the
+file-rename variant of the same symptom in BC 22.0).
+
 ## What was built
 
 `al-language-server-go/cmd/lsp-trace-proxy/main.go` — Go binary that:
