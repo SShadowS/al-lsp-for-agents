@@ -1,0 +1,5 @@
+{
+  "al.packageCachePath": "./.alpackages",
+  "al.enableCodeAnalysis": false,
+  "al.assemblyProbingPaths": []
+}

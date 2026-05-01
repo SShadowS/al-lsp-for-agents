@@ -31,6 +31,33 @@ export interface CellConfig {
    * is in extensionIds. Used by the isolated-cache experiment cell.
    */
   wrapperEnv?: Record<string, string>;
+  /**
+   * Optional fixture name. Maps to harness/fixtures/<name>/. When omitted
+   * the default test-al-project at the repo root is used. Variant fixtures
+   * exist to reproduce multi-app scenarios that the default fixture is too
+   * small to trigger (issue #17).
+   */
+  fixture?: string;
+  /**
+   * Optional list of files inside the fixture to open instead of the default
+   * Customer.Table.al. When the fixture is multi-app these should point
+   * into the dependent app so loading triggers symbol-package resolution
+   * across both apps. Paths are forward-slash, relative to fixture root.
+   */
+  openFiles?: string[];
+  /**
+   * Optional path inside the fixture to a .code-workspace file. When set,
+   * VS Code opens the workspace file instead of the fixture root as a
+   * single folder. Used by multi-root fixtures (issue #17 repros).
+   */
+  workspaceFile?: string;
+  /**
+   * Optional sub-folder of the fixture to open as the VS Code workspace
+   * root instead of fixture root. Mutually exclusive with workspaceFile.
+   * Used by fixtures that ship multiple AL apps but want one opened
+   * single-root.
+   */
+  openSubFolder?: string;
 }
 
 export interface NormalizedDiag {

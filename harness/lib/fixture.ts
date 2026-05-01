@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url";
 
 const HARNESS_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO_ROOT = dirname(HARNESS_DIR);
-const SOURCE_FIXTURE = join(REPO_ROOT, "test-al-project");
+const DEFAULT_FIXTURE = join(REPO_ROOT, "test-al-project");
+const FIXTURES_ROOT = join(HARNESS_DIR, "fixtures");
 
 const CACHE_DIRS = [".alpackages", ".alcache", ".altemplates", ".vscode-test"];
 
@@ -23,18 +24,46 @@ export interface FixtureCopy {
 }
 
 /**
+ * Resolve a fixture name to its source dir.
+ * - undefined → default test-al-project at repo root
+ * - absolute path or path with drive letter (e.g. "U:\\...") → use as-is
+ * - relative path containing "/" or "\\" → resolved against repo root
+ *   (lets a cell point at a sibling repo like ../DO.Support-UISimply/Core)
+ * - bare name → looked up under harness/fixtures/<name>
+ */
+export function resolveFixtureSource(fixtureName?: string): string {
+  if (!fixtureName) return DEFAULT_FIXTURE;
+  const isAbsolute = /^([A-Za-z]:[\\/]|\/)/.test(fixtureName);
+  if (isAbsolute) return fixtureName;
+  if (fixtureName.includes("/") || fixtureName.includes("\\")) {
+    return join(REPO_ROOT, fixtureName);
+  }
+  return join(FIXTURES_ROOT, fixtureName);
+}
+
+/**
  * Make a fresh copy of the AL fixture in a temp directory and return its
  * path. Excludes node_modules, .git, and any cache dirs from the source.
  */
-export async function makeFixtureCopy(cellName: string): Promise<FixtureCopy> {
+export async function makeFixtureCopy(
+  cellName: string,
+  fixtureName?: string
+): Promise<FixtureCopy> {
+  const source = resolveFixtureSource(fixtureName);
   const root = await mkdtemp(join(tmpdir(), `al-harness-${cellName}-`));
   const dest = join(root, "fixture");
-  await cp(SOURCE_FIXTURE, dest, {
+  // Variant fixtures (those under harness/fixtures/) ship intentional
+  // .alpackages contents — pre-compiled symbol .app files needed for
+  // cross-app dependency reproduction. The default fixture
+  // (test-al-project) lives in a dir shared with non-harness scripts and
+  // can accumulate stale cache state, so its CACHE_DIRS get stripped.
+  const stripCache = !fixtureName;
+  await cp(source, dest, {
     recursive: true,
     filter: (src) => {
       const base = src.split(/[/\\]/).pop() ?? "";
       if (base === "node_modules" || base === ".git") return false;
-      if (CACHE_DIRS.includes(base)) return false;
+      if (stripCache && CACHE_DIRS.includes(base)) return false;
       return true;
     },
   });

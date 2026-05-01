@@ -20,6 +20,13 @@ CLAUDE.md
 .claude/
 .alpackages/
 
+# Compiled AL apps in harness fixtures (rebuild via alc.exe per fixture README)
+harness/fixtures/**/*.app
+# But DO track .vscode/settings.json under harness fixtures - they are
+# part of the fixture's intentional setup.
+!harness/fixtures/**/.vscode/
+!harness/fixtures/**/.vscode/settings.json
+
 # Dev marketplace (local testing only)
 .claude-plugin-dev/
 

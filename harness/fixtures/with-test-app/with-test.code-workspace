@@ -1,0 +1,10 @@
+{
+  "folders": [
+    { "name": "FBEMC - Main", "path": "main-app" },
+    { "name": "FBEMC - Tests", "path": "test-app" }
+  ],
+  "settings": {
+    "al.enableCodeAnalysis": false,
+    "al.assemblyProbingPaths": []
+  }
+}

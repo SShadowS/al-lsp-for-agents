@@ -10,7 +10,12 @@
  *           of comparing against it. Use to seed initial baselines.
  */
 
-import { runTests } from "@vscode/test-electron";
+import {
+  runTests,
+  downloadAndUnzipVSCode,
+  resolveCliArgsFromVSCodeExecutablePath,
+} from "@vscode/test-electron";
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdir } from "node:fs/promises";
@@ -42,7 +47,7 @@ async function main(): Promise<void> {
   const cell = findCell(cellName);
 
   const lock = await loadLock();
-  const installArgs: string[] = [];
+  const vsixToInstall: string[] = [];
   let extensionDevelopmentPath: string | undefined;
 
   for (const id of cell.extensionIds) {
@@ -57,16 +62,68 @@ async function main(): Promise<void> {
       );
     }
     await downloadVsix(pin);
-    installArgs.push("--install-extension", vsixCachePath(pin));
+    vsixToInstall.push(vsixCachePath(pin));
   }
 
-  const fixture = await makeFixtureCopy(cellName);
+  const fixture = await makeFixtureCopy(cellName, cell.fixture);
   const outDir = join(HARNESS_DIR, "out", "snapshots");
   await mkdir(outDir, { recursive: true });
   const outPath = join(outDir, `${cellName}.json`);
 
   const userDataDir = join(HARNESS_DIR, "out", "user-data", cellName);
   const extensionsDir = join(HARNESS_DIR, "out", "extensions", cellName);
+
+  if (cell.workspaceFile && cell.openSubFolder) {
+    throw new Error(
+      `Cell ${cellName}: workspaceFile and openSubFolder are mutually exclusive`
+    );
+  }
+  let openTarget = fixture.path;
+  if (cell.workspaceFile) {
+    openTarget = join(fixture.path, cell.workspaceFile);
+  } else if (cell.openSubFolder) {
+    openTarget = join(fixture.path, cell.openSubFolder);
+  }
+
+  // Pre-install marketplace extensions into the per-cell extensions dir.
+  // launchArgs --install-extension is a no-op when extensionTestsPath is
+  // also set: VS Code skips the extension-management CLI path and goes
+  // straight to test-host mode. We must invoke `code --install-extension`
+  // ourselves in a separate step before runTests().
+  if (vsixToInstall.length > 0) {
+    const vscodeExe = await downloadAndUnzipVSCode(lock.vscode);
+    const cliArgs = resolveCliArgsFromVSCodeExecutablePath(vscodeExe, {
+      reuseMachineInstall: false,
+    });
+    const cli = cliArgs[0];
+    if (!cli) {
+      throw new Error("resolveCliArgsFromVSCodeExecutablePath returned no entries");
+    }
+    const baseArgs = cliArgs.slice(1);
+    for (const vsix of vsixToInstall) {
+      const args = [
+        ...baseArgs,
+        "--user-data-dir",
+        userDataDir,
+        "--extensions-dir",
+        extensionsDir,
+        "--install-extension",
+        vsix,
+        "--force",
+      ];
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(cli, args, {
+          stdio: "inherit",
+          shell: process.platform === "win32",
+        });
+        child.on("exit", (code: number | null) => {
+          if (code === 0) resolve();
+          else reject(new Error(`code --install-extension ${vsix} exited ${code ?? "?"}`));
+        });
+        child.on("error", reject);
+      });
+    }
+  }
 
   // extensionDevelopmentPath is set to LOCAL_EXTENSION ONLY when the
   // cell explicitly requests the local wrapper (via "local:al-lsp-for-
@@ -91,7 +148,7 @@ async function main(): Promise<void> {
         HARNESS_BASELINE_MODE: record ? "record" : "compare",
       },
       launchArgs: [
-        fixture.path,
+        openTarget,
         "--user-data-dir",
         userDataDir,
         "--extensions-dir",
@@ -99,7 +156,11 @@ async function main(): Promise<void> {
         "--disable-workspace-trust",
         "--disable-telemetry",
         "--disable-updates",
-        ...installArgs,
+        // AL 18.0.2190758 calls registerMcpServerDefinitionProvider which
+        // is a proposed API on VS Code 1.100. Without this flag the
+        // extension activation throws and no LSP comes up.
+        "--enable-proposed-api",
+        "ms-dynamics-smb.al",
       ],
     });
     process.stderr.write(`cell ${cellName} OK; snapshot at ${outPath}\n`);

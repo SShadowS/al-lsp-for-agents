@@ -1,0 +1,806 @@
+{
+  "capturedAt": "<recorded>",
+  "cell": "cell-real-no-wrapper",
+  "diagnostics": [
+    {
+      "relUri": "Cloud/.dependencies/CC/Codeunit/MediaRessourceMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0603",
+      "severity": "Hint",
+      "line": 65,
+      "character": 54
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AL0264",
+      "severity": "Error",
+      "line": 0,
+      "character": 9
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0247",
+      "severity": "Hint",
+      "line": 0,
+      "character": 17
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AL0197",
+      "severity": "Error",
+      "line": 0,
+      "character": 17
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0073",
+      "severity": "Hint",
+      "line": 6,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 23,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 23,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 40,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 40,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 56,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 56,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 70,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 70,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 86,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 86,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 103,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 103,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 120,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 120,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 137,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 137,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 153,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 153,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 169,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 169,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 184,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 184,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0072",
+      "severity": "Hint",
+      "line": 188,
+      "character": 46
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 190,
+      "character": 32
+    },
+    {
+      "relUri": "Cloud/AL/Activation/AppExperience.Codeunit.al",
+      "source": "AL",
+      "code": "AA0248",
+      "severity": "Hint",
+      "line": 208,
+      "character": 8
+    },
+    {
+      "relUri": "Cloud/AL/Activation/ManageTrialModuleWizard.Page.al",
+      "source": "AL",
+      "code": "AL0603",
+      "severity": "Hint",
+      "line": 767,
+      "character": 30
+    },
+    {
+      "relUri": "Cloud/AppSourceCop.json",
+      "source": "AL",
+      "code": "AS0055",
+      "severity": "Hint",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "Cloud/Specialization/AssistedSetupManagement.Codeunit.al",
+      "source": "AL",
+      "code": "AL0603",
+      "severity": "Hint",
+      "line": 38,
+      "character": 43
+    },
+    {
+      "relUri": "Cloud/Specialization/ManualSetupManagement.Codeunit.al",
+      "source": "AL",
+      "code": "AL0603",
+      "severity": "Hint",
+      "line": 31,
+      "character": 46
+    },
+    {
+      "relUri": "Cloud/Specialization/ManualSetupManagement.Codeunit.al",
+      "source": "AL",
+      "code": "AL0603",
+      "severity": "Hint",
+      "line": 35,
+      "character": 46
+    },
+    {
+      "relUri": "Cloud/Specialization/ManualSetupManagement.Codeunit.al",
+      "source": "AL",
+      "code": "AL0603",
+      "severity": "Hint",
+      "line": 40,
+      "character": 68
+    },
+    {
+      "relUri": "Cloud/Specialization/ManualSetupManagement.Codeunit.al",
+      "source": "AL",
+      "code": "AL0603",
+      "severity": "Hint",
+      "line": 66,
+      "character": 45
+    },
+    {
+      "relUri": "Cloud/Specialization/ManualSetupManagement.Codeunit.al",
+      "source": "AL",
+      "code": "AL0603",
+      "severity": "Hint",
+      "line": 85,
+      "character": 13
+    },
+    {
+      "relUri": "Cloud/app.json",
+      "source": "AL",
+      "code": "AS0081",
+      "severity": "Warning",
+      "line": 33,
+      "character": 4
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/AssertGUI.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 3,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/AzureBlobStorageTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 6,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/CloudActivationTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 11,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/CloudMigrationTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 11,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/CloudSubscriptionTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 11,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/ConsentTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 6,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/ConsentTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 133,
+      "character": 33
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/ConsentTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 162,
+      "character": 33
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/CryptographyMgtTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 5,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/HttpTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 7,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/LibraryAppRegSubscr.Codeunit.al",
+      "source": "AL",
+      "code": "AL0432",
+      "severity": "Warning",
+      "line": 9,
+      "character": 20
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/LibraryAppRegSubscr.Codeunit.al",
+      "source": "AL",
+      "code": "AL0432",
+      "severity": "Warning",
+      "line": 18,
+      "character": 24
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/MessageTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 5,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/MessageTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 6,
+      "character": 32
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/OnpremActivationTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 7,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/OnpremActivationTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 14,
+      "character": 32
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/OnpremActivationTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0432",
+      "severity": "Warning",
+      "line": 89,
+      "character": 13
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/PartnerTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 11,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/PartnerTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 17,
+      "character": 32
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/SolutionActWizTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 6,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/SolutionActWizTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 14,
+      "character": 32
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/SolutionManagementTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 6,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/SolutionManagementTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 14,
+      "character": 32
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/UsageTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 8,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/XMLDocumentUnitTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 9,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/XMLElementUnitTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 13,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/XMLNodeListUnitTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 9,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/XmlTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 6,
+      "character": 16
+    },
+    {
+      "relUri": "Test/.dependencies/CC/Test/Codeunit/XmlTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 349,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/AppNotificationTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 10,
+      "character": 23
+    },
+    {
+      "relUri": "Test/Al/CloudInstallTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 256,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/CloudInstallTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 263,
+      "character": 32
+    },
+    {
+      "relUri": "Test/Al/CloudMigrationWizTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 6,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/CloudMigrationWizTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 15,
+      "character": 32
+    },
+    {
+      "relUri": "Test/Al/ContiniaHubTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 11,
+      "character": 32
+    },
+    {
+      "relUri": "Test/Al/ContiniaHubTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 12,
+      "character": 23
+    },
+    {
+      "relUri": "Test/Al/DatacenterTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 108,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/EnvironmentTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 385,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/LibraryCloudSubsc.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 79,
+      "character": 24
+    },
+    {
+      "relUri": "Test/Al/LibraryPermissions.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 3,
+      "character": 25
+    },
+    {
+      "relUri": "Test/Al/OnlineActivationTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 389,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/PromptHttpCallsTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 287,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/SolutionMgtCloudTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 8,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/SolutionMgtCloudTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 18,
+      "character": 24
+    },
+    {
+      "relUri": "Test/Al/SolutionMgtCloudTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 19,
+      "character": 32
+    },
+    {
+      "relUri": "Test/Al/SubscriptionMgtTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 5,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/SystemMessageTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 430,
+      "character": 23
+    },
+    {
+      "relUri": "Test/Al/SystemMessageTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 557,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/SystemMessageTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 565,
+      "character": 32
+    },
+    {
+      "relUri": "Test/Al/TrialModuleTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 5,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/TrialModuleWizardTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 6,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/TrialModuleWizardTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 15,
+      "character": 32
+    },
+    {
+      "relUri": "Test/Al/WebinarSignupTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 5,
+      "character": 16
+    },
+    {
+      "relUri": "Test/Al/WebinarSignupTest.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 13,
+      "character": 32
+    },
+    {
+      "relUri": "Test/app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "Test/app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "Test/app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "Test/app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "Test/app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "Test/app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "Test/app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    }
+  ]
+}

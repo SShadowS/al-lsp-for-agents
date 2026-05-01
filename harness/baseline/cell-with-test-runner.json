@@ -1,5 +1,286 @@
 {
   "capturedAt": "<recorded>",
   "cell": "cell-with-test-runner",
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "relUri": "app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "app.json",
+      "source": "AL",
+      "code": "AL1022",
+      "severity": "Error",
+      "line": 0,
+      "character": 0
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 40,
+      "character": 21
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0606",
+      "severity": "Warning",
+      "line": 42,
+      "character": 13
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 53,
+      "character": 20
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0118",
+      "severity": "Error",
+      "line": 56,
+      "character": 29
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 61,
+      "character": 21
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 69,
+      "character": 20
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 130,
+      "character": 26
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0118",
+      "severity": "Error",
+      "line": 136,
+      "character": 34
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 142,
+      "character": 17
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 151,
+      "character": 29
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0118",
+      "severity": "Error",
+      "line": 160,
+      "character": 37
+    },
+    {
+      "relUri": "src/Codeunits/CustomerMgt.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 187,
+      "character": 24
+    },
+    {
+      "relUri": "src/Codeunits/PaymentProcessorImpl.Codeunit.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 28,
+      "character": 23
+    },
+    {
+      "relUri": "src/Pages/CustomerCard.Page.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 111,
+      "character": 38
+    },
+    {
+      "relUri": "src/Pages/CustomerCard.Page.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 130,
+      "character": 34
+    },
+    {
+      "relUri": "src/Pages/CustomerCard.Page.al",
+      "source": "AL",
+      "code": "AL0171",
+      "severity": "Error",
+      "line": 133,
+      "character": 30
+    },
+    {
+      "relUri": "src/Pages/CustomerCard.Page.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 161,
+      "character": 37
+    },
+    {
+      "relUri": "src/Pages/CustomerCard.Page.al",
+      "source": "AL",
+      "code": "AL0255",
+      "severity": "Error",
+      "line": 162,
+      "character": 34
+    },
+    {
+      "relUri": "src/Pages/CustomerCard.Page.al",
+      "source": "AL",
+      "code": "AL0255",
+      "severity": "Error",
+      "line": 163,
+      "character": 34
+    },
+    {
+      "relUri": "src/Pages/CustomerCard.Page.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 173,
+      "character": 37
+    },
+    {
+      "relUri": "src/Pages/CustomerCard.Page.al",
+      "source": "AL",
+      "code": "AL0255",
+      "severity": "Error",
+      "line": 174,
+      "character": 34
+    },
+    {
+      "relUri": "src/Pages/CustomerList.Page.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 125,
+      "character": 33
+    },
+    {
+      "relUri": "src/Pages/CustomerList.Page.al",
+      "source": "AL",
+      "code": "AL0255",
+      "severity": "Error",
+      "line": 126,
+      "character": 30
+    },
+    {
+      "relUri": "src/Pages/CustomerList.Page.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 173,
+      "character": 21
+    },
+    {
+      "relUri": "src/TableExtensions/Item.TableExt.al",
+      "source": "AL",
+      "code": "AL0247",
+      "severity": "Error",
+      "line": 0,
+      "character": 37
+    },
+    {
+      "relUri": "src/TableExtensions/Item.TableExt.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 48,
+      "character": 30
+    },
+    {
+      "relUri": "src/TableExtensions/Item.TableExt.al",
+      "source": "AL",
+      "code": "AL0118",
+      "severity": "Error",
+      "line": 71,
+      "character": 21
+    },
+    {
+      "relUri": "src/Tables/Customer.Table.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 70,
+      "character": 25
+    },
+    {
+      "relUri": "src/Tables/Customer.Table.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 87,
+      "character": 30
+    },
+    {
+      "relUri": "src/Tables/Customer.Table.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 119,
+      "character": 28
+    },
+    {
+      "relUri": "src/Tables/Customer.Table.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 126,
+      "character": 28
+    },
+    {
+      "relUri": "src/Tables/Customer.Table.al",
+      "source": "AL",
+      "code": "AL0185",
+      "severity": "Error",
+      "line": 174,
+      "character": 29
+    },
+    {
+      "relUri": "src/Tables/Customer.Table.al",
+      "source": "AL",
+      "code": "AL0118",
+      "severity": "Error",
+      "line": 176,
+      "character": 37
+    }
+  ]
 }

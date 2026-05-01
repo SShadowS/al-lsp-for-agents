@@ -1,0 +1,26 @@
+{
+  "id": "fbe33333-0000-0000-0000-000000000099",
+  "name": "FBEMC - Main",
+  "publisher": "Dynamic Technology Partners, Inc.",
+  "version": "1.0.0.0",
+  "brief": "FBEMC main app variant B with DIFFERENT id, SAME name+publisher+version",
+  "description": "Variant B: declares same Codeunit 75000 General Event Subscriptions to force ambiguous registration",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "",
+  "logo": "",
+  "dependencies": [],
+  "screenshots": [],
+  "platform": "1.0.0.0",
+  "application": "26.0.0.0",
+  "idRanges": [{ "from": 75000, "to": 75100 }],
+  "resourceExposurePolicy": {
+    "allowDebugging": true,
+    "allowDownloadingSource": true,
+    "includeSourceInSymbolFile": true
+  },
+  "runtime": "15.0",
+  "features": ["NoImplicitWith"],
+  "target": "Cloud"
+}

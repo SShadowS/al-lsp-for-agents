@@ -1,0 +1,10 @@
+{
+  "folders": [
+    { "name": "Multi App A", "path": "app-a" },
+    { "name": "Multi App B", "path": "app-b" }
+  ],
+  "settings": {
+    "al.enableCodeAnalysis": false,
+    "al.assemblyProbingPaths": []
+  }
+}

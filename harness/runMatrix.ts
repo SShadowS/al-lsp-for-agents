@@ -9,7 +9,9 @@
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stat } from "node:fs/promises";
 import { ALL_CELLS } from "./cells/index.js";
+import { resolveFixtureSource } from "./lib/fixture.js";
 
 const HARNESS_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -51,11 +53,36 @@ async function main(): Promise<void> {
   const onlyIdx = args.indexOf("--only");
   const only = onlyIdx >= 0 ? args[onlyIdx + 1] : undefined;
 
-  const cells = only
+  const candidateCells = only
     ? ALL_CELLS.filter((c) => c.name === only)
     : ALL_CELLS;
-  if (cells.length === 0) {
+  if (candidateCells.length === 0) {
     throw new Error(`No cells matched ${only ?? "<all>"}`);
+  }
+  // Skip cells whose fixture source doesn't exist (typical case: the
+  // cell-real-* cells point at u:\Git\DO.Support-UISimply\Core which is
+  // not part of this repo). Single-cell runs (--only) still error if
+  // the fixture is missing — the user explicitly asked for that one.
+  const cells = [];
+  for (const c of candidateCells) {
+    if (!c.fixture) {
+      cells.push(c);
+      continue;
+    }
+    const src = resolveFixtureSource(c.fixture);
+    try {
+      await stat(src);
+      cells.push(c);
+    } catch {
+      if (only) {
+        throw new Error(
+          `Cell ${c.name}: fixture source ${src} does not exist on this machine`
+        );
+      }
+      process.stderr.write(
+        `skipping ${c.name}: fixture ${src} not present on this machine\n`
+      );
+    }
   }
 
   const results: Result[] = [];

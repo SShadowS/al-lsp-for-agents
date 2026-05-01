@@ -1,0 +1,38 @@
+{
+  "id": "fbe22222-0000-0000-0000-000000000002",
+  "name": "FBEMC - Dependent",
+  "publisher": "Dynamic Technology Partners, Inc.",
+  "version": "1.0.0.0",
+  "brief": "Depends on FBEMC - Main",
+  "description": "Forces the AL LS to load FBEMC - Main as a symbol package",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "",
+  "logo": "",
+  "dependencies": [
+    {
+      "id": "fbe11111-0000-0000-0000-000000000001",
+      "name": "FBEMC - Main",
+      "publisher": "Dynamic Technology Partners, Inc.",
+      "version": "1.0.0.0"
+    }
+  ],
+  "screenshots": [],
+  "platform": "1.0.0.0",
+  "application": "26.0.0.0",
+  "idRanges": [
+    {
+      "from": 75200,
+      "to": 75300
+    }
+  ],
+  "resourceExposurePolicy": {
+    "allowDebugging": true,
+    "allowDownloadingSource": true,
+    "includeSourceInSymbolFile": true
+  },
+  "runtime": "15.0",
+  "features": ["NoImplicitWith"],
+  "target": "Cloud"
+}

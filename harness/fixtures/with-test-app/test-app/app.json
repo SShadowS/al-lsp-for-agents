@@ -1,0 +1,33 @@
+{
+  "id": "fbe55555-0000-0000-0000-000000000055",
+  "name": "FBEMC - Tests",
+  "publisher": "Dynamic Technology Partners, Inc.",
+  "version": "1.0.0.0",
+  "brief": "Test app companion that depends on FBEMC - Main",
+  "description": "Mimics what AL Test Runner builds: a separate test project depending on the app under test",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "",
+  "logo": "",
+  "dependencies": [
+    {
+      "id": "fbe44444-0000-0000-0000-000000000044",
+      "name": "FBEMC - Main",
+      "publisher": "Dynamic Technology Partners, Inc.",
+      "version": "1.0.0.0"
+    }
+  ],
+  "screenshots": [],
+  "platform": "1.0.0.0",
+  "application": "26.0.0.0",
+  "idRanges": [{ "from": 75500, "to": 75600 }],
+  "resourceExposurePolicy": {
+    "allowDebugging": true,
+    "allowDownloadingSource": true,
+    "includeSourceInSymbolFile": true
+  },
+  "runtime": "15.0",
+  "features": ["NoImplicitWith"],
+  "target": "Cloud"
+}

@@ -1,0 +1,26 @@
+{
+  "id": "fbe11111-0000-0000-0000-000000000001",
+  "name": "FBEMC - Main",
+  "publisher": "Dynamic Technology Partners, Inc.",
+  "version": "1.0.0.0",
+  "brief": "FBEMC main app variant A for pkg collision repro",
+  "description": "Variant A: Codeunit 75000 General Event Subscriptions",
+  "privacyStatement": "",
+  "EULA": "",
+  "help": "",
+  "url": "",
+  "logo": "",
+  "dependencies": [],
+  "screenshots": [],
+  "platform": "1.0.0.0",
+  "application": "26.0.0.0",
+  "idRanges": [{ "from": 75000, "to": 75100 }],
+  "resourceExposurePolicy": {
+    "allowDebugging": true,
+    "allowDownloadingSource": true,
+    "includeSourceInSymbolFile": true
+  },
+  "runtime": "15.0",
+  "features": ["NoImplicitWith"],
+  "target": "Cloud"
+}
