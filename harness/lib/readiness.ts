@@ -21,7 +21,7 @@ export interface QuietPeriodOptions {
 
 export class QuietPeriodTracker {
   private readonly opts: Required<QuietPeriodOptions>;
-  private readonly startedAt = 0;
+  private firstActivity: number | null = null;
   private lastActivity: number | null = null;
 
   constructor(opts: QuietPeriodOptions) {
@@ -33,6 +33,7 @@ export class QuietPeriodTracker {
   }
 
   markActivity(now: number): void {
+    if (this.firstActivity === null) this.firstActivity = now;
     this.lastActivity = now;
   }
 
@@ -41,9 +42,10 @@ export class QuietPeriodTracker {
    * or null if not settled yet at `now`.
    */
   settledAt(now: number): number | null {
-    if (now - this.startedAt < this.opts.minElapsedMs) return null;
-    if (now - this.startedAt >= this.opts.maxMs) return now;
-    if (this.lastActivity === null) return null;
+    if (this.firstActivity === null || this.lastActivity === null) return null;
+    const elapsed = now - this.firstActivity;
+    if (elapsed < this.opts.minElapsedMs) return null;
+    if (elapsed >= this.opts.maxMs) return now;
     if (now - this.lastActivity >= this.opts.quietMs) return now;
     return null;
   }
