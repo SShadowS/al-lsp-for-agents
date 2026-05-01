@@ -13,15 +13,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { request } from "node:https";
 import type { ExtensionLockFile } from "../lib/types.js";
-import { downloadVsix, sha256OfFile, vsixCachePath } from "./fetch-vsix.js";
+import { downloadVsix, loadLock, sha256OfFile, vsixCachePath } from "./fetch-vsix.js";
 import { splitExtensionId } from "../lib/marketplace.js";
 
 const HARNESS_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const LOCK_PATH = join(HARNESS_DIR, "extensions.lock.json");
-
-async function loadLock(): Promise<ExtensionLockFile> {
-  return JSON.parse(await readFile(LOCK_PATH, "utf8")) as ExtensionLockFile;
-}
 
 async function saveLock(lock: ExtensionLockFile): Promise<void> {
   await writeFile(LOCK_PATH, JSON.stringify(lock, null, 2) + "\n");
@@ -41,6 +37,9 @@ async function queryLatestVersion(id: string): Promise<string> {
         ],
       },
     ],
+    // 103 = IncludeLatestVersionOnly(1) | IncludeAssetUri(4) |
+    //       IncludeStatistics(32) | IncludeLatestPrereleaseAndStableVersionOnly(64).
+    // Returns versions sorted with the most recent first.
     flags: 103,
   });
   const data = await new Promise<string>((resolve, reject) => {
