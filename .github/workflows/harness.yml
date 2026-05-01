@@ -1,0 +1,75 @@
+name: Matrix Harness
+
+on:
+  pull_request:
+    paths:
+      - 'al-language-server-go/**'
+      - 'vscode-extension/**'
+      - 'harness/**'
+      - '.github/workflows/harness.yml'
+  workflow_dispatch:
+
+jobs:
+  matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        cell:
+          - cell-control
+          - cell-with-wrapper
+          - cell-with-test-runner
+          - cell-all-three
+          - cell-isolated-cache
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            harness/package-lock.json
+            vscode-extension/package-lock.json
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build wrapper binary
+        working-directory: al-language-server-go
+        run: go build -trimpath -ldflags="-s -w" -o ../vscode-extension/bin/al-lsp-wrapper.exe .
+
+      - name: Install vscode-extension deps
+        working-directory: vscode-extension
+        run: npm ci
+
+      - name: Compile vscode-extension
+        working-directory: vscode-extension
+        run: npm run compile
+
+      - name: Install harness deps
+        working-directory: harness
+        run: npm ci
+
+      - name: Verify lock-file integrity (fetch + sha256)
+        working-directory: harness
+        run: npm run fetch
+
+      - name: Build harness
+        working-directory: harness
+        run: npm run build
+
+      - name: Run cell ${{ matrix.cell }}
+        working-directory: harness
+        run: npm run test:cell -- ${{ matrix.cell }}
+
+      - name: Upload snapshot on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-${{ matrix.cell }}
+          path: harness/out/snapshots/${{ matrix.cell }}.json
+          if-no-files-found: ignore
