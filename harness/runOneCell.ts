@@ -27,6 +27,17 @@ async function main(): Promise<void> {
   if (!cellName) {
     throw new Error("Usage: runOneCell.ts <cell-name> [--record]");
   }
+
+  const suiteIndexPath = join(HARNESS_DIR, "out", "suite", "index.js");
+  const { access } = await import("node:fs/promises");
+  try {
+    await access(suiteIndexPath);
+  } catch {
+    throw new Error(
+      `Compiled suite not found at ${suiteIndexPath}. Run 'npm run build' first.`
+    );
+  }
+
   const record = process.argv.includes("--record");
   const cell = findCell(cellName);
 
@@ -57,15 +68,21 @@ async function main(): Promise<void> {
   const userDataDir = join(HARNESS_DIR, "out", "user-data", cellName);
   const extensionsDir = join(HARNESS_DIR, "out", "extensions", cellName);
 
+  // extensionDevelopmentPath is set ONLY when the cell explicitly
+  // requests the local wrapper (via "local:al-lsp-for-agents" in
+  // its extensionIds). Setting it for cells that don't request the
+  // wrapper would auto-activate the wrapper via its activationEvents,
+  // contaminating the cell's diagnostic baseline.
+  //
+  // TestOptions requires extensionDevelopmentPath, so when the cell
+  // doesn't request the wrapper, we use HARNESS_DIR (an inert extension
+  // that is never loaded into launchArgs/extensionIds).
+  const devPath = extensionDevelopmentPath ?? HARNESS_DIR;
+
   try {
     await runTests({
       version: lock.vscode,
-      extensionDevelopmentPath: extensionDevelopmentPath ?? LOCAL_EXTENSION,
-      // Note: test-electron requires extensionDevelopmentPath to be a
-      // real extension path. When the cell doesn't include the local
-      // wrapper we still pass it (so the loader/build is happy) but
-      // we DON'T add it to extensionIds — its activate() simply won't
-      // be called by the suite if not in the cell.
+      extensionDevelopmentPath: devPath,
       extensionTestsPath: join(HARNESS_DIR, "out", "suite", "index.js"),
       extensionTestsEnv: {
         HARNESS_CELL: cellName,
