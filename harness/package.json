@@ -7,8 +7,9 @@
     "fetch": "tsx scripts/fetch-vsix.ts",
     "refresh": "tsx scripts/refresh-lock.ts",
     "test:unit": "node --import tsx ./node_modules/mocha/bin/mocha.js 'unit/**/*.test.ts'",
-    "test:cell": "tsx runOneCell.ts",
-    "test:matrix": "tsx runMatrix.ts"
+    "build": "tsc",
+    "test:cell": "npm run build && tsx runOneCell.ts",
+    "test:matrix": "npm run build && tsx runMatrix.ts"
   },
   "devDependencies": {
     "@types/mocha": "10.0.7",
