@@ -112,6 +112,12 @@ type ALLSPWrapper struct {
 	// Initialization
 	initialized bool
 	initMu      sync.Mutex
+
+	// lastStderrLine holds the most recent stderr line from the AL LS process.
+	// Updated by the stderr scanner goroutine; read at AL LS exit time to
+	// build the al_ls.failure event signature.
+	lastStderrLineMu sync.Mutex
+	lastStderrLine   string
 }
 
 // New creates a new ALLSPWrapper
@@ -167,6 +173,18 @@ func (w *ALLSPWrapper) Run() error {
 			w.telem.WaitDrain(2 * time.Second)
 		}
 	}()
+
+	// Test-only panic injection: when AL_LSP_TEST_PANIC is set, spawn a
+	// goroutine that panics after a short delay. Used to verify the
+	// telemetry pipeline end-to-end. Off-by-default; the env var gate
+	// makes this a no-op in production.
+	if os.Getenv("AL_LSP_TEST_PANIC") != "" {
+		go func() {
+			defer w.recoverGoroutine("test-panic-injector")
+			time.Sleep(500 * time.Millisecond)
+			panic(fmt.Sprintf("AL_LSP_TEST_PANIC fired at %s", time.Now().Format(time.RFC3339)))
+		}()
+	}
 
 	channel := w.ALExtensionChannel
 	if channel == "" {
@@ -279,6 +297,19 @@ func (w *ALLSPWrapper) Run() error {
 
 	// Wait for error or completion
 	err = <-errChan
+
+	// Emit al_ls.failure if the AL LS subprocess exited abnormally.
+	if w.cmd != nil && w.cmd.ProcessState != nil && !w.cmd.ProcessState.Success() {
+		exitCode := w.cmd.ProcessState.ExitCode()
+		subtype := "crash"
+		if exitCode == 0 {
+			subtype = "exit"
+		}
+		if w.telem != nil {
+			w.telem.TrackALLSFailure(w.session, subtype, exitCode, w.getLastStderrLine())
+		}
+	}
+
 	w.Log("Wrapper stopping: %v", err)
 
 	// Cleanup
@@ -451,10 +482,24 @@ func (w *ALLSPWrapper) recoverGoroutine(name string) {
 	}
 }
 
+func (w *ALLSPWrapper) appendStderrLine(line string) {
+	w.lastStderrLineMu.Lock()
+	w.lastStderrLine = line
+	w.lastStderrLineMu.Unlock()
+}
+
+func (w *ALLSPWrapper) getLastStderrLine() string {
+	w.lastStderrLineMu.Lock()
+	defer w.lastStderrLineMu.Unlock()
+	return w.lastStderrLine
+}
+
 func (w *ALLSPWrapper) readStderr() {
 	scanner := bufio.NewScanner(w.stderr)
 	for scanner.Scan() {
-		w.Log("[AL LSP stderr] %s", scanner.Text())
+		line := scanner.Text()
+		w.appendStderrLine(line)
+		w.Log("[AL LSP stderr] %s", line)
 	}
 }
 
