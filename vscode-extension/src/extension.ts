@@ -89,10 +89,17 @@ export async function activate(context: vscode.ExtensionContext) {
     args.push("--al-extension-path", alExtensionPath);
   }
 
+  const telemetryLevel =
+    vscode.workspace.getConfiguration("telemetry").get<string>("telemetryLevel") ?? "";
+  const serverEnv: Record<string, string | undefined> = {
+    ...process.env,
+    AL_LSP_VSCODE_TELEMETRY_LEVEL: telemetryLevel,
+  };
+
   const serverOptions: ServerOptions = {
     command: serverPath,
     args,
-    options: { env: { ...process.env } },
+    options: { env: serverEnv },
   };
 
   const clientOptions: LanguageClientOptions = {
