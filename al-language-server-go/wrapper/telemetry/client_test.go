@@ -134,10 +134,10 @@ func TestPostsWrappedAppInsightsEnvelope(t *testing.T) {
 	if !strings.Contains(got, `"iKey":"fake-ikey-123"`) {
 		t.Errorf("envelope missing iKey: %s", got)
 	}
-	if !strings.Contains(got, `"baseType":"ExceptionData"`) {
-		t.Errorf("panic should produce ExceptionData baseType: %s", got)
+	if !strings.Contains(got, `"baseType":"EventData"`) {
+		t.Errorf("expected EventData baseType (all events use EventData): %s", got)
 	}
-	if !strings.Contains(got, `"name":"Microsoft.ApplicationInsights.fake-ikey-123.Exception"`) {
+	if !strings.Contains(got, `"name":"Microsoft.ApplicationInsights.fake-ikey-123.Event"`) {
 		t.Errorf("envelope name wrong: %s", got)
 	}
 	if !strings.Contains(got, `"name":"wrapper.panic"`) {

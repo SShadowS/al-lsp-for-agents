@@ -156,13 +156,13 @@ func (c *Client) drain() {
 // field; rawPayload is the marshaled event (we unmarshal to extract
 // fields into the properties map).
 func wrapEnvelope(iKey, eventName string, rawPayload []byte) ([]byte, error) {
+	// All events use EventData / customEvents. Spec design distinguished
+	// Exception vs Event types per name, but ExceptionData requires an
+	// "exceptions" array with typeName/message and Kusto queries on
+	// customEvents are equally expressive. Keeping a single shape avoids
+	// schema branching and ingestion 400s.
 	baseType := "EventData"
 	suffix := "Event"
-	switch eventName {
-	case "wrapper.panic", "al_ls.failure", "download.failure":
-		baseType = "ExceptionData"
-		suffix = "Exception"
-	}
 	var fields map[string]interface{}
 	if err := json.Unmarshal(rawPayload, &fields); err != nil {
 		return nil, err
