@@ -14,7 +14,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -54,6 +53,7 @@ def main() -> int:
     )
     # Send a malformed initialize so the wrapper exits quickly; this
     # exercises the JSON-RPC parsing path without requiring AL extension.
+    assert proc.stdin is not None  # subprocess.PIPE guarantees this
     proc.stdin.write(b"Content-Length: 5\r\n\r\nbogus")
     proc.stdin.flush()
     proc.stdin.close()
