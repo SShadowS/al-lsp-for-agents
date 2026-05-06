@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"encoding/json"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -58,4 +59,23 @@ func TestALLSFailureEventBuilder(t *testing.T) {
 	if ev.StderrSignature != "panic" {
 		t.Errorf("stderrSignature = %q, want panic", ev.StderrSignature)
 	}
+}
+
+func TestCaptureFramesReturnsFunctionAndLine(t *testing.T) {
+	var frames []Frame
+	func() {
+		frames = CaptureFrames(0)
+	}()
+	if len(frames) == 0 {
+		t.Fatalf("no frames captured")
+	}
+	if frames[0].Function == "" || frames[0].Line == 0 {
+		t.Errorf("first frame missing fields: %+v", frames[0])
+	}
+	for _, f := range frames {
+		if !strings.Contains(f.Function, ".") {
+			t.Errorf("function name lacks package: %q", f.Function)
+		}
+	}
+	_ = runtime.Caller // keep import live
 }

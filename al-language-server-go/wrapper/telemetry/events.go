@@ -192,3 +192,27 @@ func BuildConfigErrorEvent(s *Session, level ConsentLevel, subsystem, errorCode 
 		ErrorCode: errorCode,
 	}
 }
+
+// maxFrames caps the captured stack length to limit envelope size.
+const maxFrames = 32
+
+// CaptureFrames returns up to maxFrames stack frames starting `skip` frames
+// above the caller. Uses runtime.Callers + FuncForPC (function name + line
+// only). Never uses debug.Stack(); never includes argument values.
+func CaptureFrames(skip int) []Frame {
+	pcs := make([]uintptr, maxFrames)
+	n := runtime.Callers(skip+2, pcs)
+	if n == 0 {
+		return nil
+	}
+	frames := runtime.CallersFrames(pcs[:n])
+	out := make([]Frame, 0, n)
+	for {
+		f, more := frames.Next()
+		out = append(out, Frame{Function: f.Function, Line: f.Line})
+		if !more {
+			break
+		}
+	}
+	return out
+}
