@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/SShadowS/al-lsp-for-agents/al-language-server-go/wrapper/telemetry"
 )
 
 // alExtensionVersion holds an extension path and its parsed version
@@ -35,6 +37,8 @@ var vsCodeExtensionDirs = []string{
 func FindALExtension() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
+		// home-dir-error: os.UserHomeDir() failed (corrupt env or container hardening)
+		telemetry.TrackGlobalConfigError("path-discovery", "home-dir-error")
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 	return findALExtensionInHome(home)
@@ -286,8 +290,12 @@ func resolveALExtensionPathWithHome(explicitPath, home string, autoDownload bool
 	}
 
 	if autoDownload {
+		// no-extension-found: all discovery tiers exhausted (auto-download was attempted)
+		telemetry.TrackGlobalConfigError("path-discovery", "no-extension-found")
 		return "", fmt.Errorf("AL extension not found. Use --force-update-al-extension to download it")
 	}
+	// no-extension-found: all discovery tiers exhausted (no auto-download configured)
+	telemetry.TrackGlobalConfigError("path-discovery", "no-extension-found")
 	return "", fmt.Errorf("AL extension not found. Install it in VS Code, set --al-extension-path, or use --auto-download-al-extension to download it automatically")
 }
 

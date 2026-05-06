@@ -167,6 +167,7 @@ func (w *ALLSPWrapper) Run() error {
 		w.Log("telemetry init failed: %v", telemErr)
 	}
 	w.telem = client
+	telemetry.SetGlobal(client, w.session)
 	w.Log("Telemetry: %s (%s)", res.Level, res.Reason)
 	defer func() {
 		if w.telem != nil {

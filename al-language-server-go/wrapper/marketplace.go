@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/SShadowS/al-lsp-for-agents/al-language-server-go/wrapper/telemetry"
 )
 
 const (
@@ -42,6 +44,8 @@ type marketplaceProperty struct {
 // The marketplace API returns versions in newest-first order, so the first match is the latest.
 func findLatestVersion(resp marketplaceResponse, channel string) (string, error) {
 	if len(resp.Results) == 0 || len(resp.Results[0].Extensions) == 0 {
+		// manifest-missing: marketplace returned an empty extension list
+		telemetry.TrackGlobalConfigError("al-call-hierarchy-config", "manifest-missing")
 		return "", fmt.Errorf("no extensions in marketplace response")
 	}
 
@@ -109,6 +113,8 @@ func queryMarketplace() (marketplaceResponse, error) {
 
 	var result marketplaceResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
+		// invalid-json: marketplace API returned non-JSON or schema mismatch
+		telemetry.TrackGlobalConfigError("al-call-hierarchy-config", "invalid-json")
 		return marketplaceResponse{}, fmt.Errorf("failed to parse response: %w", err)
 	}
 

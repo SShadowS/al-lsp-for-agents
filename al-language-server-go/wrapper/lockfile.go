@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/SShadowS/al-lsp-for-agents/al-language-server-go/wrapper/telemetry"
 )
 
 // lockFileVersion is the current schema version for the JSON lock file.
@@ -129,6 +131,8 @@ func readLockFile(path string) (*LockInfo, error) {
 	if strings.HasPrefix(trimmed, "{") {
 		var info LockInfo
 		if err := json.Unmarshal([]byte(trimmed), &info); err != nil {
+			// parse-error: lock file JSON is malformed (truncated write or disk corruption)
+			telemetry.TrackGlobalConfigError("lockfile", "parse-error")
 			return nil, fmt.Errorf("parse JSON lock: %w", err)
 		}
 		return &info, nil
@@ -136,6 +140,8 @@ func readLockFile(path string) (*LockInfo, error) {
 
 	pid, err := strconv.Atoi(trimmed)
 	if err != nil {
+		// parse-error: legacy lock file is neither JSON nor a plain integer PID
+		telemetry.TrackGlobalConfigError("lockfile", "parse-error")
 		return nil, fmt.Errorf("legacy lock not an integer: %w", err)
 	}
 	return &LockInfo{Version: 1, PID: pid}, nil
