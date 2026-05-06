@@ -111,6 +111,18 @@ Claude Code's LSP tool has a bug where it doesn't pass the required `query` para
 
 See [KnownIssues.md](KnownIssues.md) for full details and technical analysis.
 
+## Telemetry
+
+This extension sends pseudonymous diagnostic reports to help fix bugs in
+production. Default: errors only (crashes, AL LSP failures, install
+errors, known upstream bug fingerprints). No source code, no customer
+symbol names, no paths containing your username are sent.
+
+Disable: set `AL_LSP_TELEMETRY=off` or VS Code
+`telemetry.telemetryLevel: "off"`.
+
+What's collected, what's not, and how to inspect: see [PRIVACY.md](./PRIVACY.md).
+
 ## License
 
 [GNU General Public License v3.0](https://choosealicense.com/licenses/gpl-3.0/)

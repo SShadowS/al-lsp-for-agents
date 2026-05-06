@@ -110,6 +110,18 @@ This project also provides Claude Code plugins for the same AL code intelligence
 
 See the [GitHub repo](https://github.com/SShadowS/al-lsp-for-agents) for details.
 
+## Telemetry
+
+This extension sends pseudonymous diagnostic reports to help fix bugs in
+production. Default: errors only (crashes, AL LSP failures, install
+errors, known upstream bug fingerprints). No source code, no customer
+symbol names, no paths containing your username are sent.
+
+Disable: set `AL_LSP_TELEMETRY=off` or VS Code
+`telemetry.telemetryLevel: "off"`.
+
+What's collected, what's not, and how to inspect: see [PRIVACY.md](../PRIVACY.md).
+
 ## License
 
 [MIT](https://opensource.org/licenses/MIT)
