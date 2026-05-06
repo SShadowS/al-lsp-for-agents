@@ -134,3 +134,41 @@ func TestScrubURLDropsUnknownHost(t *testing.T) {
 		t.Errorf("expected <url:other>: %q", got)
 	}
 }
+
+func TestScrubLowercaseWindowsPath(t *testing.T) {
+	in := `error in c:\users\testuser\projects\my-app\file.al`
+	got := Scrub(in, SourcePath, newCtx())
+	if strings.Contains(got, "testuser") {
+		t.Errorf("lowercase home leaked: %q", got)
+	}
+}
+
+func TestContainsLeakLowercaseWindowsPath(t *testing.T) {
+	if !ContainsLeak(`c:\users\bob\thing`) {
+		t.Errorf("safety net missed lowercase windows path")
+	}
+}
+
+func TestScrubUNCPathNormalized(t *testing.T) {
+	in := `\\server\share\some\file.al`
+	got := Scrub(in, SourcePath, newCtx())
+	if strings.Contains(got, "server") || strings.Contains(got, "share") {
+		t.Errorf("UNC server/share leaked: %q", got)
+	}
+	if !strings.Contains(got, "<UNC>") {
+		t.Errorf("expected <UNC> placeholder: %q", got)
+	}
+}
+
+func TestObjectKeywordsMatchObjectIDRe(t *testing.T) {
+	pattern := objectIDRe.String()
+	expectedKeywords := []string{"Codeunit", "Page", "Table", "Report", "XmlPort", "Query", "Enum", "Interface"}
+	for _, kw := range expectedKeywords {
+		if !strings.Contains(pattern, kw) {
+			t.Errorf("objectIDRe missing keyword %q", kw)
+		}
+		if !alObjectKeywords[kw] {
+			t.Errorf("alObjectKeywords missing %q (must mirror objectIDRe)", kw)
+		}
+	}
+}

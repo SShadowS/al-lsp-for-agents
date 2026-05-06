@@ -10,6 +10,16 @@ import (
 	"strings"
 )
 
+// replaceAllCaseInsensitive replaces all case-insensitive occurrences of old
+// with new in s. Returns s unchanged if old is empty.
+func replaceAllCaseInsensitive(s, old, newVal string) string {
+	if old == "" {
+		return s
+	}
+	re := regexp.MustCompile("(?i)" + regexp.QuoteMeta(old))
+	return re.ReplaceAllString(s, newVal)
+}
+
 // SourceMode tells Scrub which class of input it is processing. Callers MUST
 // pick one explicitly; there is no default.
 type SourceMode int
@@ -67,13 +77,21 @@ var urlAllowlist = map[string]bool{
 // matching here means the pipeline failed; the caller MUST drop the event.
 //
 // Pattern notes (Go RE2, raw strings):
-//   - [\\][\\]Users  — matches \\Users (double backslash + Users, UNC-style paths)
-//   - [\\]+Users     — matches \Users (single backslash, Windows roaming profiles)
+//   - [\\]+Users     — matches \Users or \\Users (Windows roaming/UNC paths)
 //   - /Users/        — Unix macOS home prefix
 //   - /home/         — Unix Linux home prefix
-//   - [A-Z]:[\\]     — Windows drive-letter path (C:\...)
+//   - [a-z]:[\\][a-z] — Windows drive-letter path (c:\...) — (?i) covers upper too
 //   - GUID           — raw GUID not replaced by scrub (8hex-4hex prefix)
-var leakRe = regexp.MustCompile(`[\\]+Users|/Users/[^/<]|/home/[^/<]|[A-Z]:[\\][A-Za-z]|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}`)
+//
+// (?i) at the start makes the entire pattern case-insensitive so that
+// lowercase variants (e.g. c:\users\bob) are also caught.
+var leakRe = regexp.MustCompile(`(?i)[\\]+users|/users/[^/<]|/home/[^/<]|[a-z]:[\\][a-z]|[0-9a-f]{8}-[0-9a-f]{4}`)
+
+// uncPathRe matches the \\server\share\ prefix of UNC paths.
+var uncPathRe = regexp.MustCompile(`(?i)^\\\\[^\\]+\\[^\\]+\\`)
+
+// jsonrpcStringRe matches JSON string literals (including escaped characters).
+var jsonrpcStringRe = regexp.MustCompile(`"[^"\\]*(?:\\.[^"\\]*)*"`)
 
 // Scrub runs the source-mode-aware pipeline on input.
 func Scrub(input string, mode SourceMode, ctx *ScrubContext) string {
@@ -119,14 +137,14 @@ func applyCommonRules(s string, ctx *ScrubContext) string {
 	// Workspace roots before home dir: workspace path is more specific.
 	for _, r := range ctx.WorkspaceRoots {
 		if r != "" {
-			s = strings.ReplaceAll(s, r, "<WS>")
+			s = replaceAllCaseInsensitive(s, r, "<WS>")
 		}
 	}
 	if ctx.HomeDir != "" {
-		s = strings.ReplaceAll(s, ctx.HomeDir, "<HOME>")
+		s = replaceAllCaseInsensitive(s, ctx.HomeDir, "<HOME>")
 	}
 	if ctx.TempDir != "" {
-		s = strings.ReplaceAll(s, ctx.TempDir, "<TMP>")
+		s = replaceAllCaseInsensitive(s, ctx.TempDir, "<TMP>")
 	}
 	s = guidRe.ReplaceAllStringFunc(s, func(match string) string {
 		return "<guid:" + hashWithSalt(ctx.Salt, match) + ">"
@@ -185,8 +203,7 @@ func scrubStderr(s string, ctx *ScrubContext) string {
 }
 
 func scrubJSONRPC(s string, ctx *ScrubContext) string {
-	re := regexp.MustCompile(`"[^"\\]*(?:\\.[^"\\]*)*"`)
-	s = re.ReplaceAllString(s, `"<str>"`)
+	s = jsonrpcStringRe.ReplaceAllString(s, `"<str>"`)
 	return s
 }
 
@@ -202,8 +219,14 @@ func scrubURL(s string, ctx *ScrubContext) string {
 	return u.Scheme + "://" + host
 }
 
+// drivePrefixRe matches a Windows drive-letter prefix at the start of a path.
+var drivePrefixRe = regexp.MustCompile(`(?i)^[A-Z]:\\`)
+
 func scrubPath(s string, ctx *ScrubContext) string {
-	s = regexp.MustCompile(`(?i)^[A-Z]:\\`).ReplaceAllString(s, "<DRIVE>\\")
+	// UNC paths first (more specific): \\server\share\ → <UNC>\
+	s = uncPathRe.ReplaceAllString(s, `<UNC>\`)
+	// Drive-letter paths: C:\ → <DRIVE>\
+	s = drivePrefixRe.ReplaceAllString(s, `<DRIVE>\`)
 	return s
 }
 
