@@ -151,12 +151,71 @@ func (c *Client) drain() {
 	}
 }
 
+// wrapEnvelope returns the App Insights ingestion envelope JSON bytes for
+// a single event payload. eventName comes from the event struct's Name
+// field; rawPayload is the marshaled event (we unmarshal to extract
+// fields into the properties map).
+func wrapEnvelope(iKey, eventName string, rawPayload []byte) ([]byte, error) {
+	baseType := "EventData"
+	suffix := "Event"
+	switch eventName {
+	case "wrapper.panic", "al_ls.failure", "download.failure":
+		baseType = "ExceptionData"
+		suffix = "Exception"
+	}
+	var fields map[string]interface{}
+	if err := json.Unmarshal(rawPayload, &fields); err != nil {
+		return nil, err
+	}
+	props := make(map[string]string, len(fields))
+	for k, v := range fields {
+		if v == nil {
+			continue
+		}
+		switch x := v.(type) {
+		case string:
+			props[k] = x
+		case bool:
+			props[k] = fmt.Sprint(x)
+		case float64:
+			// JSON unmarshals all numbers as float64; preserve int form when integral
+			if x == float64(int64(x)) {
+				props[k] = fmt.Sprint(int64(x))
+			} else {
+				props[k] = fmt.Sprint(x)
+			}
+		default:
+			// Slices / maps -> JSON-encoded string
+			b, _ := json.Marshal(v)
+			props[k] = string(b)
+		}
+	}
+	envelope := map[string]interface{}{
+		"name": "Microsoft.ApplicationInsights." + iKey + "." + suffix,
+		"time": time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		"iKey": iKey,
+		"data": map[string]interface{}{
+			"baseType": baseType,
+			"baseData": map[string]interface{}{
+				"ver":        2,
+				"name":       eventName,
+				"properties": props,
+			},
+		},
+	}
+	return json.Marshal(envelope)
+}
+
 func (c *Client) send(env envelope) {
 	raw, err := json.Marshal(env.payload)
 	if err != nil {
 		return
 	}
-	if ContainsLeak(maskSessionID(string(raw))) {
+	wrapped, err := wrapEnvelope(c.instrumKey, env.name, raw)
+	if err != nil {
+		return
+	}
+	if ContainsLeak(maskSessionID(string(wrapped))) {
 		c.logf("telemetry: leak safety net rejected event %s", env.name)
 		return
 	}
@@ -172,7 +231,7 @@ func (c *Client) send(env envelope) {
 		return
 	}
 	url := c.endpoint + "/v2/track"
-	req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(context.Background(), "POST", url, bytes.NewReader(wrapped))
 	if err != nil {
 		return
 	}
@@ -185,10 +244,19 @@ func (c *Client) send(env envelope) {
 		c.logf("telemetry: send error: %v", err)
 		return
 	}
+	buf := make([]byte, 256)
+	n, _ := resp.Body.Read(buf)
 	resp.Body.Close()
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 		c.logf("telemetry: 4xx %d, disabling", resp.StatusCode)
 		c.enabled.Store(false)
+	} else if resp.StatusCode != 200 {
+		c.logf("telemetry: %s -> %d %s", env.name, resp.StatusCode, string(buf[:n]))
+	} else {
+		body := string(buf[:n])
+		if !strings.Contains(body, `"errors":[]`) {
+			c.logf("telemetry: %s -> %d %s", env.name, resp.StatusCode, body)
+		}
 	}
 }
 
@@ -251,7 +319,12 @@ func (c *Client) TrackPanicSync(s *Session, panicMsg string, frames []Frame, tim
 	}
 	ev := BuildPanicEvent(s, c.cfg.Level, panicMsg, frames)
 	raw, _ := json.Marshal(ev)
-	if ContainsLeak(maskSessionID(string(raw))) {
+	wrapped, err := wrapEnvelope(c.instrumKey, ev.Name, raw)
+	if err != nil {
+		c.logf("telemetry: sync panic wrapEnvelope failed: %v", err)
+		return
+	}
+	if ContainsLeak(maskSessionID(string(wrapped))) {
 		c.logf("telemetry: leak safety net rejected sync panic event")
 		return
 	}
@@ -268,7 +341,7 @@ func (c *Client) TrackPanicSync(s *Session, panicMsg string, frames []Frame, tim
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", c.endpoint+"/v2/track", bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.endpoint+"/v2/track", bytes.NewReader(wrapped))
 	if err != nil {
 		c.logf("telemetry: sync panic envelope (build req failed): %s", raw)
 		return
@@ -282,7 +355,13 @@ func (c *Client) TrackPanicSync(s *Session, panicMsg string, frames []Frame, tim
 		c.logf("telemetry: sync panic POST failed: %v; envelope: %s", err, raw)
 		return
 	}
+	buf := make([]byte, 256)
+	n, _ := resp.Body.Read(buf)
 	resp.Body.Close()
+	body := string(buf[:n])
+	if resp.StatusCode != 200 || !strings.Contains(body, `"errors":[]`) {
+		c.logf("telemetry: sync panic %s -> %d %s", ev.Name, resp.StatusCode, body)
+	}
 }
 
 // TrackALLSFailure enqueues an al_ls.failure event.

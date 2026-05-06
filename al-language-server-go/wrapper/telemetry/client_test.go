@@ -2,10 +2,12 @@ package telemetry
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -107,5 +109,38 @@ func TestRespectsConsentLevel(t *testing.T) {
 	c.WaitDrain(500 * time.Millisecond)
 	if atomic.LoadInt32(&calls) != 0 {
 		t.Errorf("perf.outlier sent at LevelErrors")
+	}
+}
+
+func TestPostsWrappedAppInsightsEnvelope(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = string(b)
+		w.WriteHeader(200)
+		w.Write([]byte(`{"itemsReceived":1,"itemsAccepted":1,"errors":[]}`))
+	}))
+	defer srv.Close()
+	c, err := NewClient(ClientConfig{
+		ConnString: "IngestionEndpoint=" + srv.URL + ";InstrumentationKey=fake-ikey-123",
+		Level:      LevelErrors,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewSession()
+	c.TrackPanic(s, "boom", []Frame{{Function: "f", Line: 1}})
+	c.WaitDrain(2 * time.Second)
+	if !strings.Contains(got, `"iKey":"fake-ikey-123"`) {
+		t.Errorf("envelope missing iKey: %s", got)
+	}
+	if !strings.Contains(got, `"baseType":"ExceptionData"`) {
+		t.Errorf("panic should produce ExceptionData baseType: %s", got)
+	}
+	if !strings.Contains(got, `"name":"Microsoft.ApplicationInsights.fake-ikey-123.Exception"`) {
+		t.Errorf("envelope name wrong: %s", got)
+	}
+	if !strings.Contains(got, `"name":"wrapper.panic"`) {
+		t.Errorf("baseData.name should be wrapper.panic: %s", got)
 	}
 }
