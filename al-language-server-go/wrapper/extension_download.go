@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+// telemDownloadFn is the callback type used to emit download.failure telemetry.
+// stage is one of "lookup", "download", "extract". httpStatus is 0 when not from HTTP.
+// urlHost is the hostname extracted from the URL, or empty string.
+type telemDownloadFn func(stage, errMsg string, httpStatus int, urlHost string)
 
 // extractVsix extracts the extension/ subdirectory from a .vsix file to targetDir.
 // Only files under the extension/ prefix are extracted, with that prefix stripped.
@@ -73,18 +79,26 @@ func extractVsix(vsixPath, targetDir string) error {
 	return nil
 }
 
-// downloadFile downloads a URL to a local file path
-func downloadFile(url, destPath string) error {
+// downloadFile downloads a URL to a local file path.
+// telemFn is called before returning any error so the caller can emit telemetry
+// with the correct HTTP status code (0 for non-HTTP errors).
+func downloadFile(rawURL, destPath string, telemFn telemDownloadFn) error {
 	os.MkdirAll(filepath.Dir(destPath), 0755)
 
+	urlHost := hostOf(rawURL)
+
 	client := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := client.Get(url)
+	resp, err := client.Get(rawURL)
 	if err != nil {
+		errMsg := fmt.Sprintf("download failed: %s", err)
+		telemFn("download", errMsg, 0, urlHost)
 		return fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		errMsg := fmt.Sprintf("download returned status %d", resp.StatusCode)
+		telemFn("download", errMsg, resp.StatusCode, urlHost)
 		return fmt.Errorf("download returned status %d", resp.StatusCode)
 	}
 
@@ -96,8 +110,20 @@ func downloadFile(url, destPath string) error {
 
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
+		errMsg := fmt.Sprintf("failed to write download: %s", err)
+		telemFn("download", errMsg, 0, urlHost)
 		return fmt.Errorf("failed to write download: %w", err)
 	}
 
 	return nil
+}
+
+// hostOf extracts the hostname from a URL string.
+// Returns empty string if parsing fails.
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }

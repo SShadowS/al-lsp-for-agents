@@ -10,16 +10,20 @@ import (
 
 // DownloadAndInstall downloads the AL extension for the given channel and installs it.
 // Returns the extension directory path.
-func (s *ExtensionStore) DownloadAndInstall(channel string, logFn func(string, ...interface{})) (string, error) {
+// telemFn is called before returning any error so that download.failure telemetry can be
+// emitted by the caller. Pass a no-op func if telemetry is unavailable.
+func (s *ExtensionStore) DownloadAndInstall(channel string, logFn func(string, ...interface{}), telemFn telemDownloadFn) (string, error) {
 	logFn("Querying VS Code Marketplace for AL extension (%s channel)...", channel)
 
 	resp, err := queryMarketplace()
 	if err != nil {
+		telemFn("lookup", err.Error(), 0, hostOf(marketplaceAPIURL))
 		return "", fmt.Errorf("failed to query marketplace: %w", err)
 	}
 
 	version, err := findLatestVersion(resp, channel)
 	if err != nil {
+		telemFn("lookup", err.Error(), 0, hostOf(marketplaceAPIURL))
 		return "", fmt.Errorf("failed to find version: %w", err)
 	}
 
@@ -43,9 +47,10 @@ func (s *ExtensionStore) DownloadAndInstall(channel string, logFn func(string, .
 	os.MkdirAll(cacheDir, 0755)
 	vsixPath := filepath.Join(cacheDir, fmt.Sprintf("al-extension-%s.vsix", channel))
 
-	url := vspackageURL(version)
+	dlURL := vspackageURL(version)
 	logFn("Downloading AL extension v%s from marketplace...", version)
-	if err := downloadFile(url, vsixPath); err != nil {
+	// downloadFile calls telemFn itself on error (with the correct HTTP status).
+	if err := downloadFile(dlURL, vsixPath, telemFn); err != nil {
 		return "", fmt.Errorf("failed to download extension: %w", err)
 	}
 
@@ -65,6 +70,7 @@ func (s *ExtensionStore) DownloadAndInstall(channel string, logFn func(string, .
 	logFn("Extracting to %s...", targetDir)
 	if err := extractVsix(vsixPath, targetDir); err != nil {
 		os.RemoveAll(targetDir)
+		telemFn("extract", err.Error(), 0, "")
 		return "", fmt.Errorf("failed to extract extension: %w", err)
 	}
 
@@ -90,7 +96,8 @@ func (s *ExtensionStore) DownloadAndInstall(channel string, logFn func(string, .
 
 // CheckAndUpdate checks for updates and downloads if newer version is available.
 // Returns the installed version string (or empty if no update was needed/available).
-func (s *ExtensionStore) CheckAndUpdate(channel string, logFn func(string, ...interface{})) string {
+// telemFn is forwarded to DownloadAndInstall; pass a no-op func if telemetry is unavailable.
+func (s *ExtensionStore) CheckAndUpdate(channel string, logFn func(string, ...interface{}), telemFn telemDownloadFn) string {
 	logFn("Checking for AL extension updates (%s channel)...", channel)
 
 	resp, err := queryMarketplace()
@@ -118,7 +125,7 @@ func (s *ExtensionStore) CheckAndUpdate(channel string, logFn func(string, ...in
 	} else {
 		logFn("New version available: %s", version)
 	}
-	_, err = s.DownloadAndInstall(channel, logFn)
+	_, err = s.DownloadAndInstall(channel, logFn, telemFn)
 	if err != nil {
 		logFn("Warning: failed to update AL extension: %v", err)
 		return ""

@@ -201,7 +201,7 @@ func (w *ALLSPWrapper) Run() error {
 			return fmt.Errorf("failed to get home directory: %w", homeErr)
 		}
 		store := NewExtensionStore(home)
-		extensionPath, err = store.DownloadAndInstall(channel, w.Log)
+		extensionPath, err = store.DownloadAndInstall(channel, w.Log, w.downloadTelemFn())
 		if err != nil {
 			return fmt.Errorf("failed to download AL extension: %w", err)
 		}
@@ -262,7 +262,7 @@ func (w *ALLSPWrapper) Run() error {
 			store := NewExtensionStore(home)
 
 			if w.ForceUpdateALExtension || store.NeedsUpdateCheck(channel) {
-				newVersion := store.CheckAndUpdate(channel, w.Log)
+				newVersion := store.CheckAndUpdate(channel, w.Log, w.downloadTelemFn())
 				if newVersion != "" {
 					w.Log("AL extension updated to v%s — restart to use new version", newVersion)
 				}
@@ -479,6 +479,16 @@ func (w *ALLSPWrapper) recoverGoroutine(name string) {
 		}
 		w.Log("panic in %s: %v", name, msg)
 		panic(r)
+	}
+}
+
+// downloadTelemFn returns a telemDownloadFn closure that forwards download.failure
+// events to the telemetry client. Safe to call when w.telem is nil.
+func (w *ALLSPWrapper) downloadTelemFn() telemDownloadFn {
+	return func(stage, errMsg string, httpStatus int, urlHost string) {
+		if w.telem != nil {
+			w.telem.TrackDownloadFailure(w.session, stage, errMsg, httpStatus, urlHost)
+		}
 	}
 }
 
