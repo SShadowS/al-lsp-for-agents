@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/SShadowS/al-lsp-for-agents/al-language-server-go/wrapper/telemetry"
 )
 
 const (
@@ -55,6 +57,15 @@ type ALLSPWrapper struct {
 	// tell users exactly which two clients have spawned conflicting wrappers.
 	// Set via --launcher flag.
 	Launcher string
+
+	// TelemetryFlag is the value of --telemetry CLI flag (off|errors|full|empty).
+	TelemetryFlag string
+
+	// session is the per-process telemetry session (UUID + salt).
+	session *telemetry.Session
+
+	// telem is the telemetry client. nil-safe (no-op if disabled).
+	telem *telemetry.Client
 
 	// AL LSP process
 	cmd    *exec.Cmd
@@ -123,6 +134,38 @@ func (w *ALLSPWrapper) Run() error {
 	}
 
 	w.Log("AL LSP Wrapper (Go) starting...")
+
+	// Initialize telemetry. Off-by-default when connStr empty (kill switch).
+	w.session = telemetry.NewSession()
+	in := telemetry.ConsentInputs{
+		EnvVar:      os.Getenv("AL_LSP_TELEMETRY"),
+		CLIFlag:     w.TelemetryFlag,
+		VSCodeLevel: os.Getenv("AL_LSP_VSCODE_TELEMETRY_LEVEL"),
+		Launcher:    w.Launcher,
+	}
+	res := telemetry.ResolveConsent(in)
+	connStr := os.Getenv("AL_LSP_APPINSIGHTS_CONNSTR_OVERRIDE")
+	if connStr == "" {
+		connStr = telemetry.BuildTimeConnString
+	}
+	dumpPath := os.Getenv("AL_LSP_TELEMETRY_DUMP")
+	client, telemErr := telemetry.NewClient(telemetry.ClientConfig{
+		ConnString: connStr,
+		DumpPath:   dumpPath,
+		Level:      res.Level,
+		DedupPath:  filepath.Join(os.TempDir(), "al-lsp-telemetry-dedup.json"),
+		Logf:       w.Log,
+	})
+	if telemErr != nil {
+		w.Log("telemetry init failed: %v", telemErr)
+	}
+	w.telem = client
+	w.Log("Telemetry: %s (%s)", res.Level, res.Reason)
+	defer func() {
+		if w.telem != nil {
+			w.telem.WaitDrain(2 * time.Second)
+		}
+	}()
 
 	channel := w.ALExtensionChannel
 	if channel == "" {

@@ -17,6 +17,7 @@ func main() {
 	alExtensionChannel := flag.String("al-extension-channel", "release", "AL extension channel: release or prerelease")
 	forceUpdate := flag.Bool("force-update-al-extension", false, "Force download the latest AL extension version")
 	launcher := flag.String("launcher", "", "Identifies the launching client: 'vscode', 'claude-code', or empty for unknown. Used in duplicate-instance warnings.")
+	telemetryFlag := flag.String("telemetry", "", "Telemetry level: off | errors | full. Empty defers to env/VS Code/default.")
 	flag.Parse()
 
 	// Handle --dump-client-caps mode
@@ -37,6 +38,7 @@ func main() {
 	w.ALExtensionChannel = *alExtensionChannel
 	w.ForceUpdateALExtension = *forceUpdate
 	w.Launcher = *launcher
+	w.TelemetryFlag = *telemetryFlag
 
 	if err := w.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "AL LSP Wrapper error: %v\n", err)
