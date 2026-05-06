@@ -33,9 +33,6 @@ func IsAllowedBCSymbol(s string) bool {
 		return false
 	}
 	parts := strings.Split(s, ".")
-	if len(parts) == 0 {
-		return false
-	}
 	lvl2, ok := allowedSegments[parts[0]]
 	if !ok {
 		return false
@@ -56,5 +53,6 @@ func IsAllowedBCSymbol(s string) bool {
 	if len(parts) == 3 {
 		return true
 	}
+	// Depth beyond 3 levels rejected by design (spec: Allowlist source).
 	return false
 }
