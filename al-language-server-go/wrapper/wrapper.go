@@ -698,12 +698,17 @@ func (w *ALLSPWrapper) readFromClient() error {
 		w.Log("Received from client: method=%s id=%s", msg.Method, msg.GetIDString())
 
 		// Handle the message
+		start := time.Now()
 		response, err := w.handleMessage(msg)
+		durationMs := int(time.Since(start).Milliseconds())
 		if err != nil {
 			w.Log("Error handling message: %v", err)
 			if msg.IsRequest() {
 				errResp := NewErrorResponse(msg.ID, InternalError, err.Error())
 				WriteMessage(w.clientWriter, errResp)
+				if w.telem != nil {
+					w.telem.TrackLSPRequestError(w.session, msg.Method, InternalError, err.Error(), durationMs)
+				}
 			}
 			continue
 		}
@@ -713,6 +718,10 @@ func (w *ALLSPWrapper) readFromClient() error {
 			w.Log("Sending response to client: id=%s", response.GetIDString())
 			if err := WriteMessage(w.clientWriter, response); err != nil {
 				w.Log("Error writing response: %v", err)
+			}
+			// Emit lsp.request_error for JSON-RPC error responses sent to the client.
+			if response.Error != nil && w.telem != nil {
+				w.telem.TrackLSPRequestError(w.session, msg.Method, response.Error.Code, response.Error.Message, durationMs)
 			}
 		}
 	}
