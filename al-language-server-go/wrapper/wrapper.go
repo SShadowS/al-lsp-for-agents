@@ -128,6 +128,7 @@ func New() *ALLSPWrapper {
 
 // Run starts the wrapper
 func (w *ALLSPWrapper) Run() error {
+	_ = LoadEnvFile() // best-effort, errors silenced
 	// Setup logging
 	if err := w.setupLogging(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to setup logging: %v\n", err)
