@@ -10,11 +10,17 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-// sessionIDRe matches the sessionId JSON field value so the leak safety net
-// does not false-positive on the intentional UUID we put in every envelope.
+// sessionIDRe masks the legitimate per-process session UUID before the
+// ContainsLeak safety net runs. Per design (see PRIVACY.md, schemaVersion=1),
+// the sessionId is intentionally transmitted as plaintext: it is a random
+// UUID generated per process, never persisted, and not tied to user
+// identity. The leak safety net's GUID arm exists to catch *unscrubbed*
+// GUIDs leaking from user content (app IDs, file URIs); masking the
+// known-safe sessionId field prevents false-positive event drops.
 var sessionIDRe = regexp.MustCompile(`"sessionId"\s*:\s*"[^"]*"`)
 
 // maskSessionID replaces the sessionId value in marshalled JSON with a
@@ -36,7 +42,7 @@ type ClientConfig struct {
 // Client is the goroutine-safe telemetry sink.
 type Client struct {
 	cfg          ClientConfig
-	enabled      bool
+	enabled      atomic.Bool
 	endpoint     string
 	instrumKey   string
 	dump         *os.File
@@ -72,7 +78,7 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 	if cfg.ConnString == "" && cfg.DumpPath == "" {
 		return c, nil
 	}
-	c.enabled = true
+	c.enabled.Store(true)
 	c.endpoint, c.instrumKey = parseConnString(cfg.ConnString)
 	if cfg.DumpPath != "" {
 		f, err := os.OpenFile(cfg.DumpPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
@@ -91,13 +97,13 @@ func NewClient(cfg ClientConfig) (*Client, error) {
 }
 
 // Enabled reports whether the client will actually send anything.
-func (c *Client) Enabled() bool { return c != nil && c.enabled }
+func (c *Client) Enabled() bool { return c != nil && c.enabled.Load() }
 
 // WaitDrain blocks until the queue drains or timeout elapses.
 // Safe to call multiple times (subsequent calls return immediately after first
 // drain completes).
 func (c *Client) WaitDrain(timeout time.Duration) {
-	if c == nil || !c.enabled {
+	if c == nil || !c.enabled.Load() {
 		return
 	}
 	c.closeOnce.Do(func() {
@@ -155,17 +161,13 @@ func (c *Client) send(env envelope) {
 		return
 	}
 	c.dumpMu.Lock()
-	dumpFile := c.dump
-	c.dumpMu.Unlock()
-	if dumpFile != nil {
-		c.dumpMu.Lock()
-		if c.dump != nil {
-			_, _ = c.dump.Write(raw)
-			_, _ = c.dump.Write([]byte{'\n'})
-		}
+	if c.dump != nil {
+		_, _ = c.dump.Write(raw)
+		_, _ = c.dump.Write([]byte{'\n'})
 		c.dumpMu.Unlock()
 		return
 	}
+	c.dumpMu.Unlock()
 	if c.endpoint == "" {
 		return
 	}
@@ -186,7 +188,7 @@ func (c *Client) send(env envelope) {
 	resp.Body.Close()
 	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 		c.logf("telemetry: 4xx %d, disabling", resp.StatusCode)
-		c.enabled = false
+		c.enabled.Store(false)
 	}
 }
 
@@ -198,7 +200,7 @@ func (c *Client) logf(format string, args ...interface{}) {
 
 // enqueue puts an envelope on the queue if consent + dedup permit.
 func (c *Client) enqueue(name, fingerprint string, payload interface{}) {
-	if c == nil || !c.enabled {
+	if c == nil || !c.enabled.Load() {
 		return
 	}
 	if !EventAllowed(name, c.cfg.Level) {
@@ -233,7 +235,7 @@ func isExceptionEvent(name string) bool {
 
 // TrackPanic enqueues a wrapper.panic event (async).
 func (c *Client) TrackPanic(s *Session, panicMsg string, frames []Frame) {
-	if c == nil || !c.enabled || s == nil {
+	if c == nil || !c.enabled.Load() || s == nil {
 		return
 	}
 	ev := BuildPanicEvent(s, c.cfg.Level, panicMsg, frames)
@@ -244,7 +246,7 @@ func (c *Client) TrackPanic(s *Session, panicMsg string, frames []Frame) {
 // TrackPanicSync POSTs the panic event synchronously with timeout.
 // Use only from a recover() handler about to exit the process.
 func (c *Client) TrackPanicSync(s *Session, panicMsg string, frames []Frame, timeout time.Duration) {
-	if c == nil || !c.enabled || s == nil {
+	if c == nil || !c.enabled.Load() || s == nil {
 		return
 	}
 	ev := BuildPanicEvent(s, c.cfg.Level, panicMsg, frames)
@@ -254,17 +256,13 @@ func (c *Client) TrackPanicSync(s *Session, panicMsg string, frames []Frame, tim
 		return
 	}
 	c.dumpMu.Lock()
-	dumpFile := c.dump
-	c.dumpMu.Unlock()
-	if dumpFile != nil {
-		c.dumpMu.Lock()
-		if c.dump != nil {
-			_, _ = c.dump.Write(raw)
-			_, _ = c.dump.Write([]byte{'\n'})
-		}
+	if c.dump != nil {
+		_, _ = c.dump.Write(raw)
+		_, _ = c.dump.Write([]byte{'\n'})
 		c.dumpMu.Unlock()
 		return
 	}
+	c.dumpMu.Unlock()
 	if c.endpoint == "" {
 		return
 	}
@@ -289,7 +287,7 @@ func (c *Client) TrackPanicSync(s *Session, panicMsg string, frames []Frame, tim
 
 // TrackALLSFailure enqueues an al_ls.failure event.
 func (c *Client) TrackALLSFailure(s *Session, subtype string, exitCode int, lastStderrLine string) {
-	if c == nil || !c.enabled || s == nil {
+	if c == nil || !c.enabled.Load() || s == nil {
 		return
 	}
 	ev := BuildALLSFailureEvent(s, c.cfg.Level, subtype, exitCode, lastStderrLine)
@@ -299,7 +297,7 @@ func (c *Client) TrackALLSFailure(s *Session, subtype string, exitCode int, last
 
 // TrackLSPRequestError enqueues a lsp.request_error event.
 func (c *Client) TrackLSPRequestError(s *Session, method string, code int, msg string, durationMs int) {
-	if c == nil || !c.enabled || s == nil {
+	if c == nil || !c.enabled.Load() || s == nil {
 		return
 	}
 	ev := BuildLSPRequestErrorEvent(s, c.cfg.Level, method, code, msg, durationMs)
@@ -309,7 +307,7 @@ func (c *Client) TrackLSPRequestError(s *Session, method string, code int, msg s
 
 // TrackCapabilityGap enqueues a lsp.capability_gap event.
 func (c *Client) TrackCapabilityGap(s *Session, method, reason string) {
-	if c == nil || !c.enabled || s == nil {
+	if c == nil || !c.enabled.Load() || s == nil {
 		return
 	}
 	ev := BuildLSPCapabilityGapEvent(s, c.cfg.Level, method, reason)
@@ -319,7 +317,7 @@ func (c *Client) TrackCapabilityGap(s *Session, method, reason string) {
 
 // TrackMSBug enqueues an ms_bug.fingerprint event.
 func (c *Client) TrackMSBug(s *Session, bug *MSBugPattern, patternID string) {
-	if c == nil || !c.enabled || s == nil || bug == nil {
+	if c == nil || !c.enabled.Load() || s == nil || bug == nil {
 		return
 	}
 	ev := BuildMSBugEvent(s, c.cfg.Level, bug, patternID)
@@ -329,7 +327,7 @@ func (c *Client) TrackMSBug(s *Session, bug *MSBugPattern, patternID string) {
 
 // TrackPerfOutlier enqueues a perf.outlier event.
 func (c *Client) TrackPerfOutlier(s *Session, method string, durationMs int) {
-	if c == nil || !c.enabled || s == nil {
+	if c == nil || !c.enabled.Load() || s == nil {
 		return
 	}
 	ev := BuildPerfOutlierEvent(s, c.cfg.Level, method, durationMs)
@@ -339,7 +337,7 @@ func (c *Client) TrackPerfOutlier(s *Session, method string, durationMs int) {
 
 // TrackDownloadFailure enqueues a download.failure event.
 func (c *Client) TrackDownloadFailure(s *Session, stage, errMsg string, httpStatus int, urlHost string) {
-	if c == nil || !c.enabled || s == nil {
+	if c == nil || !c.enabled.Load() || s == nil {
 		return
 	}
 	ev := BuildDownloadFailureEvent(s, c.cfg.Level, stage, errMsg, httpStatus, urlHost)
@@ -349,7 +347,7 @@ func (c *Client) TrackDownloadFailure(s *Session, stage, errMsg string, httpStat
 
 // TrackConfigError enqueues a config.error event.
 func (c *Client) TrackConfigError(s *Session, subsystem, errorCode string) {
-	if c == nil || !c.enabled || s == nil {
+	if c == nil || !c.enabled.Load() || s == nil {
 		return
 	}
 	ev := BuildConfigErrorEvent(s, c.cfg.Level, subsystem, errorCode)
