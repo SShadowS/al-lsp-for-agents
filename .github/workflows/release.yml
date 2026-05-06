@@ -36,7 +36,15 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: go build -trimpath -ldflags="-s -w" -o ../al-lsp-wrapper${{ matrix.ext }} .
+          AL_LSP_APPINSIGHTS_CONNSTR: ${{ secrets.AL_LSP_APPINSIGHTS_CONNSTR }}
+        shell: bash
+        run: |
+          # Bake telemetry connection string into BuildTimeConnString.
+          # Empty secret = inert telemetry (kill switch); release ships
+          # with telemetry compiled in but no destination.
+          go build -trimpath \
+            -ldflags="-s -w -X github.com/SShadowS/al-lsp-for-agents/al-language-server-go/wrapper/telemetry.BuildTimeConnString=${AL_LSP_APPINSIGHTS_CONNSTR}" \
+            -o ../al-lsp-wrapper${{ matrix.ext }} .
 
       # Downloads the exact asset name from al-call-hierarchy releases
       # Note: al-call-hierarchy must be a public repo for github.token to work
@@ -114,6 +122,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          # Tags containing a hyphen (e.g. v1.11.0-beta.1) ship as
+          # GitHub prereleases. Stable tags (vX.Y.Z) ship as full releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             al-lsp-wrapper-windows-x64.zip
             al-lsp-wrapper-linux-x64.tar.gz
@@ -121,9 +132,11 @@ jobs:
             al-lsp-for-agents-linux-x64.vsix
 
       - name: Publish to VS Code Marketplace
+        # Skipped for prerelease tags (containing a hyphen). Beta testers
+        # install by downloading the .vsix from the GitHub prerelease.
+        if: ${{ !contains(github.ref_name, '-') }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
-          # Publish the pre-built .vsix files (identical to GitHub release assets)
           npx @vscode/vsce publish --packagePath al-lsp-for-agents-win32-x64.vsix
           npx @vscode/vsce publish --packagePath al-lsp-for-agents-linux-x64.vsix

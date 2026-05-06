@@ -175,18 +175,6 @@ func (w *ALLSPWrapper) Run() error {
 		}
 	}()
 
-	// Test-only panic injection: when AL_LSP_TEST_PANIC is set, spawn a
-	// goroutine that panics after a short delay. Used to verify the
-	// telemetry pipeline end-to-end. Off-by-default; the env var gate
-	// makes this a no-op in production.
-	if os.Getenv("AL_LSP_TEST_PANIC") != "" {
-		go func() {
-			defer w.recoverGoroutine("test-panic-injector")
-			time.Sleep(500 * time.Millisecond)
-			panic(fmt.Sprintf("AL_LSP_TEST_PANIC fired at %s", time.Now().Format(time.RFC3339)))
-		}()
-	}
-
 	channel := w.ALExtensionChannel
 	if channel == "" {
 		channel = "release"

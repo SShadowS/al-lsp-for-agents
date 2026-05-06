@@ -123,6 +123,24 @@ Disable: set `AL_LSP_TELEMETRY=off` or VS Code
 
 What's collected, what's not, and how to inspect: see [PRIVACY.md](./PRIVACY.md).
 
+## Beta testing
+
+Pre-release builds (tag suffix `-beta.N`) are published as GitHub
+**prereleases** only — they do **not** appear in the VS Code Marketplace
+or the Claude Code marketplace.
+
+To opt in to a beta:
+
+1. Open the [Releases page](https://github.com/SShadowS/al-lsp-for-agents/releases) and pick a prerelease.
+2. Download the appropriate asset:
+   - VS Code: `al-lsp-for-agents-win32-x64.vsix` or `al-lsp-for-agents-linux-x64.vsix`
+   - Standalone: `al-lsp-wrapper-windows-x64.zip` or `al-lsp-wrapper-linux-x64.tar.gz`
+3. Install:
+   - VS Code: `code --install-extension <path-to-vsix>`
+   - Standalone: extract and run the binary directly
+
+To revert to stable, install the latest non-prerelease release the same way.
+
 ## License
 
 [GNU General Public License v3.0](https://choosealicense.com/licenses/gpl-3.0/)
