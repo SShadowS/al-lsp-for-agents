@@ -722,6 +722,18 @@ func (w *ALLSPWrapper) readFromClient() error {
 			// Emit lsp.request_error for JSON-RPC error responses sent to the client.
 			if response.Error != nil && w.telem != nil {
 				w.telem.TrackLSPRequestError(w.session, msg.Method, response.Error.Code, response.Error.Message, durationMs)
+				// Emit lsp.capability_gap when the method is unknown to all handlers
+				// and the AL LS (or the call-hierarchy handler) returned -32601.
+				if response.Error.Code == MethodNotFound {
+					w.telem.TrackCapabilityGap(w.session, msg.Method, "unhandled")
+				}
+			}
+		}
+		// Emit perf.outlier when the request took longer than the per-method threshold.
+		if msg.IsRequest() && w.telem != nil {
+			threshold := telemetry.PerfThresholdMs(msg.Method)
+			if durationMs >= threshold {
+				w.telem.TrackPerfOutlier(w.session, msg.Method, durationMs)
 			}
 		}
 	}
