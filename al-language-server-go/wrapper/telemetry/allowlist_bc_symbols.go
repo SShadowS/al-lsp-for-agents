@@ -1,6 +1,9 @@
 package telemetry
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // allowedSegments is a tree of permitted namespace segments. A symbol like
 // "Microsoft.Sales.Receivables" is allowed iff every segment is present at
@@ -55,4 +58,38 @@ func IsAllowedBCSymbol(s string) bool {
 	}
 	// Depth beyond 3 levels rejected by design (spec: Allowlist source).
 	return false
+}
+
+// ObjectIDRange classifies an AL object id by assigned range.
+type ObjectIDRange int
+
+const (
+	RangeUnknown ObjectIDRange = iota
+	RangeMSReserved
+	RangeCustomer
+	RangeMSTest
+)
+
+// ClassifyObjectID maps an AL object id to its range.
+func ClassifyObjectID(id int) ObjectIDRange {
+	switch {
+	case id >= 1 && id <= 49999:
+		return RangeMSReserved
+	case id >= 50000 && id <= 99999:
+		return RangeCustomer
+	case id >= 130000 && id <= 150000:
+		return RangeMSTest
+	default:
+		return RangeUnknown
+	}
+}
+
+// CustomerBucket returns a coarse bucket label like "50xxx" for a customer-
+// range id. Used to keep magnitude information without the exact id.
+func CustomerBucket(id int) string {
+	if id < 50000 || id > 99999 {
+		return "non-customer"
+	}
+	base := (id / 1000) * 1000
+	return fmt.Sprintf("%dxxx", base/1000)
 }
