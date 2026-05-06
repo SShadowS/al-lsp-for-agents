@@ -46,17 +46,19 @@ jobs:
             -ldflags="-s -w -X github.com/SShadowS/al-lsp-for-agents/al-language-server-go/wrapper/telemetry.BuildTimeConnString=${AL_LSP_APPINSIGHTS_CONNSTR}" \
             -o ../al-lsp-wrapper${{ matrix.ext }} .
 
-      # Downloads the exact asset name from al-call-hierarchy releases
-      # Note: al-call-hierarchy must be a public repo for github.token to work
+      # Downloads the exact asset name from al-call-hierarchy releases.
+      # Pinned to v0.6.0: latest (v0.7.0) shipped without assets; pin keeps
+      # CI green while upstream re-publishes. Bump after assets land.
       - name: Download al-call-hierarchy
         env:
           GH_TOKEN: ${{ github.token }}
+          AL_CALL_HIERARCHY_TAG: v0.6.0
         shell: bash
         run: |
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            gh release download --repo SShadowS/al-call-hierarchy --pattern "al-call-hierarchy-windows-x64.exe" -D .
+            gh release download "$AL_CALL_HIERARCHY_TAG" --repo SShadowS/al-call-hierarchy --pattern "al-call-hierarchy-windows-x64.exe" -D .
           else
-            gh release download --repo SShadowS/al-call-hierarchy --pattern "al-call-hierarchy-linux-x64" -D .
+            gh release download "$AL_CALL_HIERARCHY_TAG" --repo SShadowS/al-call-hierarchy --pattern "al-call-hierarchy-linux-x64" -D .
           fi
 
       - name: Upload artifact
