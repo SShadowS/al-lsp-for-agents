@@ -211,12 +211,15 @@ func (c *Client) send(env envelope) {
 	if err != nil {
 		return
 	}
-	wrapped, err := wrapEnvelope(c.instrumKey, env.name, raw)
-	if err != nil {
+	// Run leak safety net on the raw payload BEFORE wrapping. The wrapped
+	// envelope contains the instrumentation key (a GUID), which would
+	// false-positive against the GUID arm of leakRe.
+	if ContainsLeak(maskSessionID(string(raw))) {
+		c.logf("telemetry: leak safety net rejected event %s", env.name)
 		return
 	}
-	if ContainsLeak(maskSessionID(string(wrapped))) {
-		c.logf("telemetry: leak safety net rejected event %s", env.name)
+	wrapped, err := wrapEnvelope(c.instrumKey, env.name, raw)
+	if err != nil {
 		return
 	}
 	c.dumpMu.Lock()
@@ -319,13 +322,16 @@ func (c *Client) TrackPanicSync(s *Session, panicMsg string, frames []Frame, tim
 	}
 	ev := BuildPanicEvent(s, c.cfg.Level, panicMsg, frames)
 	raw, _ := json.Marshal(ev)
+	// Run leak safety net on the raw payload BEFORE wrapping. The wrapped
+	// envelope contains the instrumentation key (a GUID), which would
+	// false-positive against the GUID arm of leakRe.
+	if ContainsLeak(maskSessionID(string(raw))) {
+		c.logf("telemetry: leak safety net rejected sync panic event")
+		return
+	}
 	wrapped, err := wrapEnvelope(c.instrumKey, ev.Name, raw)
 	if err != nil {
 		c.logf("telemetry: sync panic wrapEnvelope failed: %v", err)
-		return
-	}
-	if ContainsLeak(maskSessionID(string(wrapped))) {
-		c.logf("telemetry: leak safety net rejected sync panic event")
 		return
 	}
 	c.dumpMu.Lock()
