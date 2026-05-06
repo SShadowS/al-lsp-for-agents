@@ -235,6 +235,7 @@ func (w *ALLSPWrapper) Run() error {
 	// Background update check (non-blocking)
 	if w.AutoDownloadALExtension {
 		go func() {
+			defer w.recoverGoroutine("update-checker")
 			home, err := os.UserHomeDir()
 			if err != nil {
 				w.Log("Warning: cannot check for updates: %v", err)
@@ -259,15 +260,20 @@ func (w *ALLSPWrapper) Run() error {
 	errChan := make(chan error, 2)
 
 	// Read stderr in background
-	go w.readStderr()
+	go func() {
+		defer w.recoverGoroutine("stderr-scanner")
+		w.readStderr()
+	}()
 
 	// Read from AL LSP and forward notifications/handle responses
 	go func() {
+		defer w.recoverGoroutine("lsp-reader")
 		errChan <- w.readFromLSP()
 	}()
 
 	// Main loop: read from client and process
 	go func() {
+		defer w.recoverGoroutine("client-reader")
 		errChan <- w.readFromClient()
 	}()
 
@@ -421,6 +427,29 @@ func extractPIDFromLogPath(path string) int {
 }
 
 // isProcessRunning is implemented per-platform in process_windows.go and process_unix.go
+
+// recoverGoroutine is the standard recover() wrapper installed at the top of
+// every goroutine spawned by the wrapper. Captures the panic, sends a
+// wrapper.panic event synchronously, logs locally, then re-panics so the
+// runtime still produces native crash output and the right exit code.
+//
+// Usage:
+//
+//	go func() {
+//	    defer w.recoverGoroutine("stderr-scanner")
+//	    // ... goroutine body ...
+//	}()
+func (w *ALLSPWrapper) recoverGoroutine(name string) {
+	if r := recover(); r != nil {
+		msg := fmt.Sprint(r)
+		frames := telemetry.CaptureFrames(2)
+		if w.telem != nil {
+			w.telem.TrackPanicSync(w.session, msg, frames, 5*time.Second)
+		}
+		w.Log("panic in %s: %v", name, msg)
+		panic(r)
+	}
+}
 
 func (w *ALLSPWrapper) readStderr() {
 	scanner := bufio.NewScanner(w.stderr)
@@ -639,7 +668,10 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 	if msg.Method == "initialized" {
 		w.SendNotificationToLSP("initialized", nil)
 		// Start call hierarchy server after AL LSP is initialized
-		go w.startCallHierarchyServer()
+		go func() {
+			defer w.recoverGoroutine("call-hierarchy-start")
+			w.startCallHierarchyServer()
+		}()
 		return nil, nil
 	}
 
