@@ -84,5 +84,13 @@ func TestClassifierOutputsAreClosed(t *testing.T) {
 		if out == in {
 			t.Errorf("ClassifyStderr echoed input: %q", in)
 		}
+		out = ClassifyLSPError(200, in)
+		if out == in {
+			t.Errorf("ClassifyLSPError echoed input: %q", in)
+		}
+		out = ClassifyDownloadError(in)
+		if out == in {
+			t.Errorf("ClassifyDownloadError echoed input: %q", in)
+		}
 	}
 }
