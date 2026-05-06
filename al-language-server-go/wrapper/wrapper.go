@@ -500,6 +500,11 @@ func (w *ALLSPWrapper) readStderr() {
 		line := scanner.Text()
 		w.appendStderrLine(line)
 		w.Log("[AL LSP stderr] %s", line)
+		if w.telem != nil {
+			if bug, patternID := telemetry.MatchMSBug(line); bug != nil {
+				w.telem.TrackMSBug(w.session, bug, patternID)
+			}
+		}
 	}
 }
 
