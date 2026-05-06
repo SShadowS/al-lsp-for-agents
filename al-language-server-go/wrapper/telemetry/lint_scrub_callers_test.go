@@ -47,7 +47,7 @@ func TestEveryScrubCallerDeclaresSourceMode(t *testing.T) {
 			if !ok || ident.Name != "telemetry" {
 				return true
 			}
-			if len(call.Args) < 2 {
+			if len(call.Args) < 3 {
 				failures = append(failures, fset.Position(call.Pos()).String()+" Scrub() needs 3 args")
 				return true
 			}
