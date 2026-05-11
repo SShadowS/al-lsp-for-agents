@@ -2,6 +2,20 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.11.0] - 2026-05-11
+
+### Fixed
+- **AL Language Server silent hang on `al/symbolSearch`** -- when transitive dependency `.app` files (e.g. Microsoft Base Application required by Continia Core) were not in the project's own `.alpackages`, MS AL LSP threw an unhandled `NullReferenceException` in `SymbolSearchService.SymbolDescriptor.Create` and never sent a JSON-RPC response. The wrapper now walks ancestor directories for additional `.alpackages` folders and adds them to `packageCachePaths` so transitive deps stay resolvable. Stops at `.git` boundary or filesystem root. Captured stack trace + Microsoft issue draft in `docs/al-lsp-bugs/silent-symbolsearch-crash.md`.
+- **Empty `workspace/symbol` queries no longer return an error** -- Claude Code's LSP tool surface has no `query` parameter on `workspaceSymbol`, so agents previously retry-looped on the `-32602` error. Returns `[]` instead, and fires a one-shot `window/showMessage` warning so the user sees the upstream Claude Code limitation.
+
+### Added
+- **`documentSymbol` event-publisher overlay (local files)** -- procedures decorated with `[IntegrationEvent]`, `[BusinessEvent]`, or `[InternalEvent]` are tagged `SymbolKind.Event` (24) with the attribute name prepended to their detail string. Makes event publishers immediately distinguishable from regular procedures in agent symbol enumeration.
+- **`documentSymbol` synthesis for dependency objects** -- when MS AL LSP returns empty for `al-preview:/` virtual URIs (a known limitation), the wrapper synthesizes a complete `DocumentSymbol[]` from the `.app` archive's `SymbolReference.json` data. Includes full method signatures, parameter types, and event-publisher tagging. Tested against Base Application's `Approvals Mgmt.` codeunit (258 methods, 137 IntegrationEvents).
+- **Hover enrichment on event-name literals** -- hovering on `'OnAfterPostApprovalEntries'` inside an `[EventSubscriber(...)]` attribute returns the publisher's full signature, attribute kind, and source app metadata, all in a single hover call. Multi-line attributes (one-argument-per-line formatting) and embedded comments are supported.
+
+### Changed
+- Updated al-call-hierarchy to v0.8.0 (ancestor `.alpackages` walk, event-aware indexing, new RPCs for the wrapper's hover/documentSymbol enrichment paths).
+
 ## [1.10.2] - 2026-04-30
 
 ### Fixed
