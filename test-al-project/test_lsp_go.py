@@ -260,7 +260,12 @@ class LSPTester:
         return self.add_result("WorkspaceSymbol", False, "Empty or null result", response)
 
     def test_workspace_symbol_empty_query(self) -> TestResult:
-        """Test workspace/symbol with empty query (should return error)."""
+        """Test workspace/symbol with empty query.
+
+        Returns an empty array, not an error. Claude Code's LSP tool surface
+        for workspaceSymbol can't pass a query parameter, so erroring caused
+        agents to retry-loop. Returning [] lets the agent move on.
+        """
         _, response = self.request("workspace/symbol", {
             "query": ""
         })
@@ -269,10 +274,17 @@ class LSPTester:
             return self.add_result("WorkspaceSymbol (empty)", False, "No response (timeout)")
 
         if "error" in response:
-            # This is expected behavior
-            return self.add_result("WorkspaceSymbol (empty)", True, "Correctly returned error for empty query", response)
+            return self.add_result("WorkspaceSymbol (empty)", False,
+                                   f"Should return [] not error: {response['error'].get('message')}",
+                                   response)
 
-        return self.add_result("WorkspaceSymbol (empty)", False, "Should have returned error for empty query", response)
+        result = response.get("result")
+        if isinstance(result, list) and len(result) == 0:
+            return self.add_result("WorkspaceSymbol (empty)", True,
+                                   "Returns [] (no retry-loop for Claude Code)", response)
+
+        return self.add_result("WorkspaceSymbol (empty)", False,
+                               f"Expected [], got {result!r}", response)
 
     def test_workspace_symbol_path_workaround(self) -> TestResult:
         """Test workspace/symbol with file path as query (workaround test)."""

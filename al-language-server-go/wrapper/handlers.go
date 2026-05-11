@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync/atomic"
 )
 
 // TextDocumentPositionParams represents LSP text document position parameters
@@ -158,6 +159,10 @@ type WrapperInterface interface {
 
 	// SendNotificationToLSP sends a notification to the AL LSP
 	SendNotificationToLSP(method string, params interface{}) error
+
+	// SendNotificationToClient sends a notification (e.g. window/showMessage)
+	// upstream to the editor / Claude Code.
+	SendNotificationToClient(method string, params interface{})
 
 	// GetCallHierarchyServer returns the call hierarchy server (may be nil)
 	GetCallHierarchyServer() *CallHierarchyServer
@@ -452,11 +457,127 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 	// Enrich action hovers with properties (RunObject, ToolTip, Image, etc.)
 	enriched = enrichActionHover(w, enriched, params)
 
+	// Enrich event-name literals inside [EventSubscriber(...)] — agent's most
+	// common discovery path. One hover call returns the publisher's full
+	// signature + attribute kind + source app.
+	enriched = enrichEventReferenceHover(w, enriched, params)
+
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
 		Result:  enriched,
 	}, nil
+}
+
+// enrichEventReferenceHover detects when the cursor is on the event-name
+// string literal of an [EventSubscriber(...)] attribute. When it is, ask
+// al-call-hierarchy to look up the publisher in its dependency index and
+// append (or set) the resulting signature + attribute tag in the hover.
+//
+// Returns the original hover unchanged when:
+//   - the cursor isn't on an event reference,
+//   - the call-hierarchy server isn't initialized,
+//   - the publisher couldn't be resolved.
+func enrichEventReferenceHover(
+	w WrapperInterface,
+	hoverResult json.RawMessage,
+	params TextDocumentPositionParams,
+) json.RawMessage {
+	ch := w.GetCallHierarchyServer()
+	if ch == nil || !ch.IsInitialized() {
+		return hoverResult
+	}
+	resp, err := ch.Request("al-call-hierarchy/eventReferenceAtPosition", map[string]interface{}{
+		"uri":      params.TextDocument.URI,
+		"position": params.Position,
+	})
+	if err != nil || resp == nil || resp.Error != nil || resp.Result == nil || string(resp.Result) == "null" {
+		return hoverResult
+	}
+	var match struct {
+		PublisherObjectType string  `json:"publisherObjectType"`
+		PublisherObject     string  `json:"publisherObject"`
+		EventName           string  `json:"eventName"`
+		Signature           *string `json:"signature"`
+		AttributeKind       *string `json:"attributeKind"`
+		AppName             *string `json:"appName"`
+		AppVersion          *string `json:"appVersion"`
+	}
+	if err := json.Unmarshal(resp.Result, &match); err != nil {
+		return hoverResult
+	}
+
+	// Build a markdown block summarizing the event reference.
+	var b strings.Builder
+	tag := ""
+	if match.AttributeKind != nil {
+		tag = *match.AttributeKind + " "
+	}
+	b.WriteString(fmt.Sprintf("**%s%s**\n\n", tag, match.EventName))
+	if match.Signature != nil {
+		b.WriteString("```al\n")
+		b.WriteString(*match.Signature)
+		b.WriteString("\n```\n\n")
+	}
+	b.WriteString(fmt.Sprintf("Publisher: %s \"%s\"", match.PublisherObjectType, match.PublisherObject))
+	if match.AppName != nil {
+		ver := ""
+		if match.AppVersion != nil {
+			ver = " " + *match.AppVersion
+		}
+		b.WriteString(fmt.Sprintf("  \nSource: %s%s", *match.AppName, ver))
+	}
+	enrichment := b.String()
+
+	return appendHoverMarkdown(hoverResult, enrichment)
+}
+
+// appendHoverMarkdown returns the hover result with `extra` appended to its
+// MarkupContent value (or replaces a null hover with one containing extra).
+func appendHoverMarkdown(hoverResult json.RawMessage, extra string) json.RawMessage {
+	if extra == "" {
+		return hoverResult
+	}
+	if len(hoverResult) == 0 || string(hoverResult) == "null" {
+		// AL LSP returned nothing — synthesize a hover entirely from the enrichment.
+		return makeHoverMarkdown(extra)
+	}
+	var hover struct {
+		Contents struct {
+			Kind  string `json:"kind"`
+			Value string `json:"value"`
+		} `json:"contents"`
+		Range json.RawMessage `json:"range,omitempty"`
+	}
+	if err := json.Unmarshal(hoverResult, &hover); err != nil {
+		return makeHoverMarkdown(extra)
+	}
+	if hover.Contents.Value == "" {
+		hover.Contents.Kind = "markdown"
+		hover.Contents.Value = extra
+	} else {
+		hover.Contents.Kind = "markdown"
+		hover.Contents.Value = hover.Contents.Value + "\n\n---\n\n" + extra
+	}
+	out, err := json.Marshal(hover)
+	if err != nil {
+		return hoverResult
+	}
+	return out
+}
+
+// makeHoverMarkdown builds a minimal Hover with markdown contents.
+func makeHoverMarkdown(value string) json.RawMessage {
+	hover := struct {
+		Contents struct {
+			Kind  string `json:"kind"`
+			Value string `json:"value"`
+		} `json:"contents"`
+	}{}
+	hover.Contents.Kind = "markdown"
+	hover.Contents.Value = value
+	out, _ := json.Marshal(hover)
+	return out
 }
 
 // normalizeHoverResult converts deprecated hover content formats to MarkupContent.
@@ -633,22 +754,241 @@ func (h *DocumentSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Messa
 	response, err := w.SendRequestToLSP("textDocument/documentSymbol", params)
 	if err != nil {
 		w.Log("Failed to send documentSymbol request: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		// For virtual URIs, AL LSP sometimes silently drops requests.
+		// Fall through so we can try the al-call-hierarchy fallback.
+		response = &Message{Result: json.RawMessage("[]")}
 	}
 
 	if response.Error != nil {
-		return nil, &Message{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Error:   response.Error,
+		// Same idea: if AL LSP errored on a virtual URI, the fallback may
+		// still produce useful data. Otherwise propagate the error.
+		if !IsVirtualURI(params.TextDocument.URI) {
+			return nil, &Message{
+				JSONRPC: "2.0",
+				ID:      msg.ID,
+				Error:   response.Error,
+			}
 		}
+		w.Log("AL LSP error on virtual URI %s: %s — trying call-hierarchy fallback",
+			params.TextDocument.URI, response.Error.Message)
+		response.Result = json.RawMessage("[]")
+		response.Error = nil
+	}
+
+	// Virtual-URI fallback: dependency objects can be served from the
+	// al-call-hierarchy dependency index even when the AL LSP returns nothing.
+	if IsVirtualURI(params.TextDocument.URI) {
+		if synth := tryDependencyDocumentSymbol(w, params.TextDocument.URI); synth != nil {
+			alCount := countDocumentSymbols(response.Result)
+			synthCount := countDocumentSymbols(synth)
+			if synthCount > alCount {
+				w.Log("documentSymbol: using call-hierarchy fallback (synth=%d, AL=%d) for %s",
+					synthCount, alCount, params.TextDocument.URI)
+				return &Message{
+					JSONRPC: "2.0",
+					ID:      msg.ID,
+					Result:  synth,
+				}, nil
+			}
+		}
+	}
+
+	// Local-file overlay: re-tag procedures decorated with [IntegrationEvent]
+	// or [BusinessEvent] as SymbolKind.Event (24) and prepend the attribute
+	// tag to the detail string. Matches Phase A behavior for dependency
+	// objects so the agent sees events consistently across local + external code.
+	enriched := response.Result
+	if !IsVirtualURI(params.TextDocument.URI) {
+		enriched = overlayLocalEventPublishers(w, response.Result, params.TextDocument.URI)
 	}
 
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
-		Result:  response.Result,
+		Result:  enriched,
 	}, nil
+}
+
+// overlayLocalEventPublishers rewrites the documentSymbol response so any
+// procedure that has [IntegrationEvent]/[BusinessEvent]/[InternalEvent]
+// attached is tagged as kind:Event with a "[IntegrationEvent] " prefix on
+// detail. Returns the original result unchanged when no publishers are found
+// or the call-hierarchy server is unavailable.
+func overlayLocalEventPublishers(w WrapperInterface, raw json.RawMessage, uri string) json.RawMessage {
+	if len(raw) == 0 || string(raw) == "null" {
+		return raw
+	}
+	ch := w.GetCallHierarchyServer()
+	if ch == nil || !ch.IsInitialized() {
+		return raw
+	}
+	resp, err := ch.Request("al-call-hierarchy/eventPublishersInFile", map[string]interface{}{
+		"uri": uri,
+	})
+	if err != nil || resp == nil || resp.Error != nil || resp.Result == nil {
+		return raw
+	}
+	// Parse al-call-hierarchy's publishers list (camelCase JSON).
+	var pubs []struct {
+		Name      string `json:"name"`
+		Detail    string `json:"detail"`
+		Kind      uint32 `json:"kind"`
+		Range     struct {
+			Start struct{ Line, Character uint32 } `json:"start"`
+			End   struct{ Line, Character uint32 } `json:"end"`
+		} `json:"range"`
+		SelectionRange struct {
+			Start struct{ Line, Character uint32 } `json:"start"`
+			End   struct{ Line, Character uint32 } `json:"end"`
+		} `json:"selectionRange"`
+	}
+	if err := json.Unmarshal(resp.Result, &pubs); err != nil || len(pubs) == 0 {
+		return raw
+	}
+	pubByName := make(map[string]int, len(pubs))
+	for i, p := range pubs {
+		pubByName[strings.ToLower(p.Name)] = i
+	}
+	w.Log("overlayLocalEventPublishers: %d publishers in %s", len(pubs), uri)
+
+	// AL LSP's documentSymbol can return either DocumentSymbol[] (hierarchical,
+	// with `children`) or SymbolInformation[] (flat). Handle both by parsing
+	// into a generic []map and rewriting matching entries in place.
+	var entries []map[string]interface{}
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return raw
+	}
+	rewritten := 0
+	walkAndOverlay(entries, pubs, pubByName, &rewritten)
+	if rewritten == 0 {
+		return raw
+	}
+	out, err := json.Marshal(entries)
+	if err != nil {
+		w.Log("overlayLocalEventPublishers: failed to marshal: %v", err)
+		return raw
+	}
+	w.Log("overlayLocalEventPublishers: tagged %d procedures as Event", rewritten)
+	return out
+}
+
+// walkAndOverlay rewrites kind+detail on entries whose `name` matches a known
+// event publisher. Recurses into `children` so hierarchical DocumentSymbol
+// trees get fully covered.
+func walkAndOverlay(
+	entries []map[string]interface{},
+	pubs []struct {
+		Name      string `json:"name"`
+		Detail    string `json:"detail"`
+		Kind      uint32 `json:"kind"`
+		Range     struct {
+			Start struct{ Line, Character uint32 } `json:"start"`
+			End   struct{ Line, Character uint32 } `json:"end"`
+		} `json:"range"`
+		SelectionRange struct {
+			Start struct{ Line, Character uint32 } `json:"start"`
+			End   struct{ Line, Character uint32 } `json:"end"`
+		} `json:"selectionRange"`
+	},
+	pubByName map[string]int,
+	rewritten *int,
+) {
+	for _, entry := range entries {
+		name, _ := entry["name"].(string)
+		if name != "" {
+			cleanName := strings.TrimSpace(strings.Trim(name, "\""))
+			// AL LSP names may include parens — drop them for the lookup.
+			if idx := strings.Index(cleanName, "("); idx > 0 {
+				cleanName = strings.TrimSpace(cleanName[:idx])
+			}
+			if pi, ok := pubByName[strings.ToLower(cleanName)]; ok {
+				p := pubs[pi]
+				entry["kind"] = p.Kind
+				existingDetail, _ := entry["detail"].(string)
+				if existingDetail == "" {
+					entry["detail"] = p.Detail
+				} else if !strings.Contains(existingDetail, "[IntegrationEvent]") &&
+					!strings.Contains(existingDetail, "[BusinessEvent]") &&
+					!strings.Contains(existingDetail, "[InternalEvent]") {
+					// Prepend the event tag from p.Detail (which starts with it).
+					tag := p.Detail
+					if i := strings.Index(tag, " "); i > 0 {
+						tag = tag[:i]
+					}
+					entry["detail"] = tag + " " + existingDetail
+				}
+				*rewritten++
+			}
+		}
+		// Recurse into children if present (DocumentSymbol[] form).
+		if children, ok := entry["children"].([]interface{}); ok {
+			childMaps := make([]map[string]interface{}, 0, len(children))
+			for _, c := range children {
+				if cm, ok := c.(map[string]interface{}); ok {
+					childMaps = append(childMaps, cm)
+				}
+			}
+			walkAndOverlay(childMaps, pubs, pubByName, rewritten)
+		}
+	}
+}
+
+// tryDependencyDocumentSymbol asks the al-call-hierarchy server to synthesize
+// a DocumentSymbol[] for a dependency object addressed by an al-preview:/ URI.
+// Returns nil if the call-hierarchy server isn't available, isn't initialized,
+// or returns no results.
+func tryDependencyDocumentSymbol(w WrapperInterface, uri string) json.RawMessage {
+	ch := w.GetCallHierarchyServer()
+	if ch == nil || !ch.IsInitialized() {
+		return nil
+	}
+	resp, err := ch.Request("al-call-hierarchy/dependencyDocumentSymbol", map[string]interface{}{
+		"uri": uri,
+	})
+	if err != nil {
+		w.Log("dependencyDocumentSymbol RPC failed: %v", err)
+		return nil
+	}
+	if resp == nil || resp.Error != nil || resp.Result == nil {
+		return nil
+	}
+	if countDocumentSymbols(resp.Result) == 0 {
+		return nil
+	}
+	return resp.Result
+}
+
+// countDocumentSymbols returns the length of a DocumentSymbol[] or
+// SymbolInformation[] JSON array. Returns 0 for null, empty, or unparseable.
+func countDocumentSymbols(raw json.RawMessage) int {
+	if len(raw) == 0 || string(raw) == "null" {
+		return 0
+	}
+	var arr []json.RawMessage
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return 0
+	}
+	return len(arr)
+}
+
+// emptyWorkspaceSymbolWarned is set the first time we surface the
+// "Claude Code can't pass a workspaceSymbol query" warning so users see the
+// upstream limitation without being spammed on every call.
+var emptyWorkspaceSymbolWarned atomic.Bool
+
+func warnOnceEmptyWorkspaceSymbol(w WrapperInterface) {
+	if !emptyWorkspaceSymbolWarned.CompareAndSwap(false, true) {
+		return
+	}
+	w.SendNotificationToClient("window/showMessage", map[string]interface{}{
+		"type": 2, // Warning
+		"message": "workspaceSymbol called with an empty query. Claude Code's LSP " +
+			"tool surface (operation: \"workspaceSymbol\", filePath, line, character) " +
+			"has no `query` parameter — the AL LSP rejects empty queries, so this " +
+			"call returns no results. This is a Claude Code limitation, not an AL LSP " +
+			"bug. Use documentSymbol(file) for per-file symbols or goToDefinition " +
+			"to navigate into dependency objects.",
+	})
 }
 
 // WorkspaceSymbolHandler handles workspace/symbol
@@ -667,12 +1007,28 @@ func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 
 	query := params.Query
 
-	// Check for empty query
+	// Empty/whitespace queries: return [] AND surface the upstream bug.
+	//
+	// Background: Claude Code's LSP tool surface for workspaceSymbol takes
+	// only filePath/line/character — there is no `query` parameter — so the
+	// agent literally cannot pass a search term. The AL LSP itself rejects
+	// empty queries.
+	//
+	// Returning -32602 caused agents to retry-loop. Returning [] silently
+	// would hide the bug from users. Compromise: return [] (agent moves on)
+	// AND raise a window/showMessage warning the first time per session so
+	// the human sees the upstream issue and can file/track it. The log line
+	// stays loud either way.
 	if strings.TrimSpace(query) == "" {
-		w.Log("Empty workspace/symbol query")
-		return nil, NewErrorResponse(msg.ID, InvalidParams,
-			"AL Language Server requires a non-empty query for workspace/symbol. "+
-				"Please provide a symbol name to search for.")
+		w.Log("Empty workspace/symbol query — Claude Code's LSP tool cannot pass a query parameter. " +
+			"Returning [] so agents don't retry-loop; user is warned via window/showMessage. " +
+			"Upstream: Claude Code LSP tool surface lacks a `query` field on workspaceSymbol.")
+		warnOnceEmptyWorkspaceSymbol(w)
+		return &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  json.RawMessage("[]"),
+		}, nil
 	}
 
 	// Workaround: Claude Code sometimes sends file paths instead of symbol names

@@ -16,6 +16,7 @@ type mockWrapper struct {
 	mu                  sync.Mutex
 	lspRequests         []lspCall
 	lspNotifications    []lspCall
+	clientNotifications []lspCall
 	openedFiles         map[string]bool
 	initializedProjects map[string]bool
 	workspaceFolders    []WorkspaceFolder
@@ -65,6 +66,12 @@ func (m *mockWrapper) SendNotificationToLSP(method string, params interface{}) e
 	defer m.mu.Unlock()
 	m.lspNotifications = append(m.lspNotifications, lspCall{Method: method, Params: params})
 	return nil
+}
+
+func (m *mockWrapper) SendNotificationToClient(method string, params interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.clientNotifications = append(m.clientNotifications, lspCall{Method: method, Params: params})
 }
 
 func (m *mockWrapper) GetCallHierarchyServer() *CallHierarchyServer {

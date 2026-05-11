@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // FindAppJSON searches for app.json starting from the given directory,
@@ -151,6 +152,17 @@ func NewWorkspaceSettings(projectRoot string, manifest *AppManifest) *WorkspaceS
 	// packageCachePaths, so dependency symbols are loaded when available.
 	refs := []ProjectReferenceDefinition{}
 
+	// Build packageCachePaths: project's own .alpackages plus any ancestor
+	// .alpackages folders the user may have. The MS AL Language Server crashes
+	// with a NullReferenceException in SymbolSearchService when a transitive
+	// dependency (e.g. Base Application referenced by Continia Core) is not in
+	// the cache — the exception is logged but no JSON-RPC response is sent, so
+	// al/symbolSearch silently hangs forever. Pointing AL LSP at an ancestor
+	// .alpackages folder (a common monorepo layout) lets it find the
+	// transitive .app files and avoids the crash. See docs/al-lsp-bugs/
+	// silent-symbolsearch-crash.md.
+	packageCachePaths := DiscoverPackageCachePaths(projectRoot)
+
 	return &WorkspaceSettings{
 		WorkspacePath: projectRoot,
 		ALResourceConfigurationSettings: ALResourceConfigurationSettings{
@@ -158,7 +170,7 @@ func NewWorkspaceSettings(projectRoot string, manifest *AppManifest) *WorkspaceS
 			CodeAnalyzers:            []string{},
 			EnableCodeAnalysis:       false,
 			BackgroundCodeAnalysis:   "None",
-			PackageCachePaths:        []string{"./.alpackages"},
+			PackageCachePaths:        packageCachePaths,
 			RuleSetPath:              nil,
 			EnableCodeActions:        true,
 			IncrementalBuild:         false,
@@ -170,6 +182,51 @@ func NewWorkspaceSettings(projectRoot string, manifest *AppManifest) *WorkspaceS
 		ExpectedProjectReferenceDefinitions: refs,
 		ActiveWorkspaceClosure:              []string{projectRoot},
 	}
+}
+
+// DiscoverPackageCachePaths returns the list of .alpackages folders the AL
+// Language Server should search for dependency .app files. The first entry is
+// always the project's own `.alpackages` (relative path, matches VS Code AL
+// extension behavior). Additional absolute paths point at ancestor folders
+// containing .alpackages — this gives AL LSP access to transitive deps that
+// the user may have at a monorepo level.
+//
+// The walk stops at the first of: filesystem root, drive letter, or a
+// directory containing a `.git` folder (project boundary).
+func DiscoverPackageCachePaths(projectRoot string) []string {
+	paths := []string{"./.alpackages"}
+
+	abs, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return paths
+	}
+
+	current := filepath.Dir(abs)
+	seen := map[string]bool{strings.ToLower(filepath.Join(abs, ".alpackages")): true}
+
+	for i := 0; i < 8; i++ {
+		// Stop at filesystem root (parent == self).
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+
+		alpkg := filepath.Join(current, ".alpackages")
+		key := strings.ToLower(alpkg)
+		if info, err := os.Stat(alpkg); err == nil && info.IsDir() && !seen[key] {
+			paths = append(paths, alpkg)
+			seen[key] = true
+		}
+
+		// Project boundary: stop walking once we cross out of a git repo.
+		if _, err := os.Stat(filepath.Join(current, ".git")); err == nil {
+			break
+		}
+
+		current = parent
+	}
+
+	return paths
 }
 
 // ActiveWorkspaceParams represents parameters for al/setActiveWorkspace
