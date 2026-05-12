@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.11.1] - 2026-05-12
+
+### Fixed
+- **`al-preview:/` URIs rejected by Claude Code's LSP tool surface** -- Claude Code performs a filesystem existence check on `filePath` before forwarding LSP requests, so any tool call against an `al-preview:/...dal` URI returned by `goToDefinition` failed with "File does not exist" before the wrapper saw it (the v1.10.1 Phase A fallback in `DocumentSymbolHandler` was unreachable in real Claude Code usage). The wrapper now materializes the `.al` source on demand from the dependency `.app` archive into a per-workspace cache under `<UserCacheDir>/al-lsp-for-agents/preview-cache/`, rewrites `goToDefinition` responses to point at the materialized file, and translates subsequent `documentSymbol`/`hover`/`goToDefinition` requests on cache paths back to the original virtual URI before forwarding to the AL LSP. Cache lives outside the workspace so the AL LSP's project scanner doesn't pick it up as duplicate object declarations (avoids the same family of bugs as #17).
+
 ## [1.11.0] - 2026-05-11
 
 ### Fixed

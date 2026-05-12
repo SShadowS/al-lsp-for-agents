@@ -21,6 +21,7 @@ type mockWrapper struct {
 	initializedProjects map[string]bool
 	workspaceFolders    []WorkspaceFolder
 	callHierarchyServer *CallHierarchyServer
+	previewCache        *previewCache
 	logs                []string
 }
 
@@ -76,6 +77,20 @@ func (m *mockWrapper) SendNotificationToClient(method string, params interface{}
 
 func (m *mockWrapper) GetCallHierarchyServer() *CallHierarchyServer {
 	return m.callHierarchyServer
+}
+
+func (m *mockWrapper) WorkspaceFolders() []WorkspaceFolder {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]WorkspaceFolder, len(m.workspaceFolders))
+	copy(out, m.workspaceFolders)
+	return out
+}
+
+func (m *mockWrapper) PreviewCache() *previewCache {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.previewCache
 }
 
 func (m *mockWrapper) UpdateWorkspaceFolders(added []WorkspaceFolder, removed []WorkspaceFolder) {

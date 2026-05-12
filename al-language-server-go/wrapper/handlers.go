@@ -170,6 +170,14 @@ type WrapperInterface interface {
 	// UpdateWorkspaceFolders adds/removes workspace folders from internal state
 	UpdateWorkspaceFolders(added []WorkspaceFolder, removed []WorkspaceFolder)
 
+	// WorkspaceFolders returns a snapshot of the current workspace folders
+	// (used to locate the project root for cache materialization).
+	WorkspaceFolders() []WorkspaceFolder
+
+	// PreviewCache returns the al-preview→file materializer, or nil when
+	// no workspace folder is known yet.
+	PreviewCache() *previewCache
+
 	// Log logs a message
 	Log(format string, args ...interface{})
 }
@@ -186,6 +194,13 @@ func (h *DefinitionHandler) Handle(msg *Message, w WrapperInterface) (*Message, 
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		w.Log("Failed to parse definition params: %v", err)
 		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
+	}
+
+	// If the request targets a materialized preview-cache file, recover the
+	// original al-preview:/ URI so AL LSP keeps treating it as a virtual
+	// dependency document.
+	if virtual, ok := translateCachePathToVirtual(w, params.TextDocument.URI); ok {
+		params.TextDocument.URI = virtual
 	}
 
 	// Virtual URIs (e.g. al-preview:) are dependency documents managed by the AL LSP
@@ -264,11 +279,137 @@ func (h *DefinitionHandler) Handle(msg *Message, w WrapperInterface) (*Message, 
 		}
 	}
 
+	// Rewrite al-preview:/ URIs in the definition response to materialized
+	// file:// URIs so Claude Code's filesystem-existence pre-flight check
+	// on the LSP tool surface passes (it rejects al-preview:/ paths with
+	// "File does not exist" before the wrapper sees subsequent requests).
+	finalResult := rewriteDefinitionPreviewURIs(w, response.Result)
+
 	return &Message{
 		JSONRPC: "2.0",
 		ID:      msg.ID,
-		Result:  response.Result,
+		Result:  finalResult,
 	}, nil
+}
+
+// rewriteDefinitionPreviewURIs walks a definition response and replaces
+// any al-preview:/ URI with the corresponding file:// URI from the
+// preview cache. Materializes the .al source on demand.
+//
+// Definition results can be Location, Location[], LocationLink, or
+// LocationLink[]. We parse defensively and only rewrite the `uri` /
+// `targetUri` fields when they're al-preview:/.
+func rewriteDefinitionPreviewURIs(w WrapperInterface, raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || string(raw) == "null" {
+		return raw
+	}
+	cache := w.PreviewCache()
+	if cache == nil {
+		return raw
+	}
+	// AL LSP's packageCachePaths come from al/setActiveWorkspace — we
+	// rebuild them via the same discovery helper used there.
+	folders := w.WorkspaceFolders()
+	if len(folders) == 0 {
+		return raw
+	}
+	projectRoot, err := FileURIToPath(folders[0].URI)
+	if err != nil {
+		return raw
+	}
+	packagePaths := DiscoverPackageCachePaths(projectRoot)
+
+	// Try array first, then single object.
+	var arr []map[string]interface{}
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		changed := false
+		for i := range arr {
+			if rewritePreviewURIFields(w, cache, packagePaths, arr[i]) {
+				changed = true
+			}
+		}
+		if !changed {
+			return raw
+		}
+		out, err := json.Marshal(arr)
+		if err != nil {
+			return raw
+		}
+		return out
+	}
+
+	var single map[string]interface{}
+	if err := json.Unmarshal(raw, &single); err == nil {
+		if rewritePreviewURIFields(w, cache, packagePaths, single) {
+			out, err := json.Marshal(single)
+			if err != nil {
+				return raw
+			}
+			return out
+		}
+	}
+	return raw
+}
+
+// translateCachePathToVirtual checks whether `uri` is a file:// URI pointing
+// at the al-preview cache (i.e. a path under <workspace>/.al-preview-cache).
+// When it is, returns the recovered al-preview:/ URI so downstream code can
+// route the request through the Phase A virtual-URI handling.
+//
+// Returns (uri, false) for everything else (real source files, already-
+// virtual URIs, missing cache, etc.).
+//
+// Rationale: Claude Code's LSP tool surface performs a filesystem-existence
+// check on `filePath` before forwarding the call to the wrapper. Real
+// al-preview:/ URIs fail that check. The wrapper materializes the .al
+// source under .al-preview-cache so the check passes, then translates the
+// cache path back to the original virtual URI here so the AL LSP (which
+// only knows the virtual URI) gets the right input.
+func translateCachePathToVirtual(w WrapperInterface, uri string) (string, bool) {
+	if IsVirtualURI(uri) {
+		return uri, false
+	}
+	cache := w.PreviewCache()
+	if cache == nil {
+		return uri, false
+	}
+	filePath, err := FileURIToPath(uri)
+	if err != nil {
+		return uri, false
+	}
+	original, ok := cache.resolveCachePath(filePath)
+	if !ok {
+		return uri, false
+	}
+	w.Log("translateCachePathToVirtual: %s -> %s", uri, original)
+	return original, true
+}
+
+// rewritePreviewURIFields materializes any al-preview:/ URI inside a
+// Location or LocationLink object and replaces the URI field with the
+// resulting file:// URI. Returns true when any field was rewritten.
+func rewritePreviewURIFields(
+	w WrapperInterface,
+	cache *previewCache,
+	packagePaths []string,
+	obj map[string]interface{},
+) bool {
+	changed := false
+	for _, field := range []string{"uri", "targetUri"} {
+		v, ok := obj[field].(string)
+		if !ok || !strings.HasPrefix(v, "al-preview:") {
+			continue
+		}
+		mapped, err := cache.materialize(v, packagePaths)
+		if err != nil {
+			w.Log("previewCache: failed to materialize %s: %v", v, err)
+			continue
+		}
+		obj[field] = mapped
+		changed = true
+		w.Log("Rewrote definition %s: %s -> %s", field, v, mapped)
+	}
+	return changed
 }
 
 // isEmptyDefinitionResult checks if a definition result is empty (null or empty array)
@@ -399,6 +540,12 @@ func (h *HoverHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Mess
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		w.Log("Failed to parse hover params: %v", err)
 		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
+	}
+
+	// If the request targets a materialized preview-cache file, recover the
+	// original al-preview:/ URI so AL LSP recognizes it as a virtual document.
+	if virtual, ok := translateCachePathToVirtual(w, params.TextDocument.URI); ok {
+		params.TextDocument.URI = virtual
 	}
 
 	// Virtual URIs (e.g. al-preview:) are dependency documents managed by the AL LSP
@@ -725,6 +872,13 @@ func (h *DocumentSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Messa
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		w.Log("Failed to parse documentSymbol params: %v", err)
 		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
+	}
+
+	// If the request targets a materialized preview-cache file, recover the
+	// original al-preview:/ URI so the call-hierarchy fallback can synthesize
+	// dependency document symbols.
+	if virtual, ok := translateCachePathToVirtual(w, params.TextDocument.URI); ok {
+		params.TextDocument.URI = virtual
 	}
 
 	// Virtual URIs (e.g. al-preview:) are dependency documents managed by the AL LSP

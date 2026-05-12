@@ -89,6 +89,13 @@ type ALLSPWrapper struct {
 	// Call hierarchy server
 	callHierarchyServer *CallHierarchyServer
 
+	// Preview cache: materializes .al from .app archives to make
+	// dependency objects addressable via on-disk file:// URIs (so
+	// Claude Code's filePath-existence check on the LSP tool surface
+	// passes for documentSymbol on dependency objects).
+	previewCache   *previewCache
+	previewCacheMu sync.Mutex
+
 	// Write mutex for AL LSP stdin (handleServerRequest and SendRequestToLSP
 	// can write concurrently from different goroutines)
 	stdinMu sync.Mutex
@@ -1334,6 +1341,36 @@ func (w *ALLSPWrapper) waitForProjectLoad(workspacePath string) {
 // GetCallHierarchyServer returns the call hierarchy server
 func (w *ALLSPWrapper) GetCallHierarchyServer() *CallHierarchyServer {
 	return w.callHierarchyServer
+}
+
+// WorkspaceFolders returns a snapshot of the current workspace folders.
+// Handlers use this to locate the project root for cache materialization
+// (al-preview URI → file:// cache path).
+func (w *ALLSPWrapper) WorkspaceFolders() []WorkspaceFolder {
+	out := make([]WorkspaceFolder, len(w.workspaceFolders))
+	copy(out, w.workspaceFolders)
+	return out
+}
+
+// PreviewCache lazily constructs and returns the previewCache rooted at
+// the first workspace folder. Returns nil when no workspace folder is
+// known yet (the wrapper hasn't received `initialize` or didOpen).
+func (w *ALLSPWrapper) PreviewCache() *previewCache {
+	w.previewCacheMu.Lock()
+	defer w.previewCacheMu.Unlock()
+	if w.previewCache != nil {
+		return w.previewCache
+	}
+	folders := w.workspaceFolders
+	if len(folders) == 0 {
+		return nil
+	}
+	root, err := FileURIToPath(folders[0].URI)
+	if err != nil || root == "" {
+		return nil
+	}
+	w.previewCache = newPreviewCache(root)
+	return w.previewCache
 }
 
 // startCallHierarchyServer starts the al-call-hierarchy server
