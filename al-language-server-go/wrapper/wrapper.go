@@ -1369,7 +1369,7 @@ func (w *ALLSPWrapper) PreviewCache() *previewCache {
 	if err != nil || root == "" {
 		return nil
 	}
-	w.previewCache = newPreviewCache(root)
+	w.previewCache = newPreviewCacheForWorkspace(root)
 	return w.previewCache
 }
 

@@ -82,7 +82,7 @@ func TestParseALPreviewURI(t *testing.T) {
 
 func TestPreviewCache_ResolveCachePath_Roundtrip(t *testing.T) {
 	tmp := t.TempDir()
-	c := newPreviewCache(tmp)
+	c := newPreviewCache(tmp, t.TempDir())
 	cachePath := c.cachePathFor("Base Application", "Codeunit", "1535", "Approvals Mgmt.")
 
 	uri, ok := c.resolveCachePath(cachePath)
@@ -97,7 +97,7 @@ func TestPreviewCache_ResolveCachePath_Roundtrip(t *testing.T) {
 
 func TestPreviewCache_ResolveCachePath_RejectsOutsidePath(t *testing.T) {
 	tmp := t.TempDir()
-	c := newPreviewCache(tmp)
+	c := newPreviewCache(tmp, t.TempDir())
 	other := filepath.Join(tmp, "some-other-folder", "foo.al")
 	if _, ok := c.resolveCachePath(other); ok {
 		t.Errorf("expected resolveCachePath to reject path outside cache root")
@@ -135,17 +135,23 @@ func TestExtractVersionFromAppFilename(t *testing.T) {
 
 func TestSourceFileNameCandidates(t *testing.T) {
 	cands := sourceFileNameCandidates("Approvals Mgmt.", "Codeunit")
-	want := []string{
-		"Approvals Mgmt..Codeunit.al",
-		"ApprovalsMgmt..Codeunit.al",
-		"Approvals-Mgmt..Codeunit.al",
+	// Order matters: the strict matcher in readSourceFromArchive iterates
+	// these in order, so the most-likely-to-hit MS convention should be
+	// present (not necessarily first — fuzzy fallback rescues either way).
+	wantContains := []string{
+		"Approvals Mgmt..Codeunit.al",  // literal
+		"Approvals Mgmt.Codeunit.al",   // trailing dot trimmed
+		"ApprovalsMgmt..Codeunit.al",   // spaces stripped
+		"ApprovalsMgmt.Codeunit.al",    // MS's actual convention
+		"Approvals-Mgmt..Codeunit.al",  // hyphen variant (rare)
 	}
-	if len(cands) != len(want) {
-		t.Fatalf("got %d candidates, want %d (%v)", len(cands), len(want), cands)
+	got := make(map[string]bool)
+	for _, c := range cands {
+		got[c] = true
 	}
-	for i, w := range want {
-		if cands[i] != w {
-			t.Errorf("candidate %d: got %q want %q", i, cands[i], w)
+	for _, w := range wantContains {
+		if !got[w] {
+			t.Errorf("missing expected candidate %q (got %v)", w, cands)
 		}
 	}
 }
@@ -201,7 +207,7 @@ func TestPreviewCache_Materialize(t *testing.T) {
 		"src/Approvals Mgmt..Codeunit.al":  objSrc,
 	})
 
-	c := newPreviewCache(workspace)
+	c := newPreviewCache(workspace, t.TempDir())
 	uri := "al-preview:///allang/Base%20Application/Codeunit/1535/Approvals%20Mgmt..dal"
 
 	mapped, err := c.materialize(uri, []string{pkgCache})
@@ -267,7 +273,7 @@ func TestPreviewCache_Materialize_PrefersNewerVersion(t *testing.T) {
 		"src/Approvals Mgmt..Codeunit.al": fresh,
 	})
 
-	c := newPreviewCache(workspace)
+	c := newPreviewCache(workspace, t.TempDir())
 	uri := "al-preview:///allang/Base%20Application/Codeunit/1535/Approvals%20Mgmt..dal"
 	mapped, err := c.materialize(uri, []string{pkgCache})
 	if err != nil {
@@ -280,9 +286,131 @@ func TestPreviewCache_Materialize_PrefersNewerVersion(t *testing.T) {
 	}
 }
 
+// Reproduces the failure mode from agent-flow run 2: MS AL LSP returns
+// `al-preview:/allang/<workspace-name>/...` for dependency symbols, so
+// the URI's "app" segment doesn't match any .app filename. The fallback
+// scan must find the object by source filename regardless.
+func TestPreviewCache_Materialize_FallsBackToContentScan(t *testing.T) {
+	workspace := t.TempDir()
+	pkgCache := filepath.Join(workspace, ".alpackages")
+	if err := os.MkdirAll(pkgCache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	const objSrc = "// real content\ncodeunit 1535 \"Approvals Mgmt.\"\n{\n}\n"
+	appPath := filepath.Join(pkgCache, "Microsoft_Base Application_27.0.46665.47126.app")
+	buildFakeApp(t, appPath, map[string]string{
+		"NavxManifest.xml":                "<App />",
+		"src/Approvals Mgmt..Codeunit.al": objSrc,
+	})
+
+	c := newPreviewCache(workspace, t.TempDir())
+
+	// URI uses the requesting workspace name as the "app" segment —
+	// no .app filename will contain "_test-al-project_".
+	uri := "al-preview:///allang/test-al-project/Codeunit/1535/Approvals%20Mgmt..dal"
+
+	mapped, err := c.materialize(uri, []string{pkgCache})
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	cachePath, _ := FileURIToPath(mapped)
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		t.Fatalf("read cache file: %v", err)
+	}
+	if string(data) != objSrc {
+		t.Errorf("expected real source content, got %q", string(data))
+	}
+}
+
+// Reproduces the exact filename convention Microsoft ships in
+// Base Application: object "Approvals Mgmt." (note trailing dot)
+// becomes "ApprovalsMgmt.Codeunit.al" — spaces stripped, trailing dot
+// dropped. The fuzzy/canonical match path must catch this even though
+// our strict-name candidates produce "Approvals Mgmt..Codeunit.al".
+func TestPreviewCache_Materialize_HandlesMSFilenameConvention(t *testing.T) {
+	workspace := t.TempDir()
+	pkgCache := filepath.Join(workspace, ".alpackages")
+	if err := os.MkdirAll(pkgCache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	const objSrc = "// MS-style file naming\ncodeunit 1535 \"Approvals Mgmt.\"\n{\n}\n"
+	appPath := filepath.Join(pkgCache, "Microsoft_Base Application_26.1.33404.34053.app")
+	buildFakeApp(t, appPath, map[string]string{
+		"NavxManifest.xml": "<App />",
+		// Note: file path uses MS's actual layout — `OtherCapabilities/Approvals/`
+		// subdirectory + name without trailing dot + period before Codeunit.
+		"src/OtherCapabilities/Approvals/ApprovalsMgmt.Codeunit.al": objSrc,
+	})
+
+	c := newPreviewCache(workspace, t.TempDir())
+	uri := "al-preview:///allang/test-al-project/Codeunit/1535/Approvals%20Mgmt..dal"
+	mapped, err := c.materialize(uri, []string{pkgCache})
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	cachePath, _ := FileURIToPath(mapped)
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		t.Fatalf("read cache file: %v", err)
+	}
+	if string(data) != objSrc {
+		t.Errorf("expected real content, got %q", string(data))
+	}
+}
+
+func TestCanonicalSourceKey(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"Approvals Mgmt..Codeunit.al", "approvalsmgmtcodeunital"},
+		{"ApprovalsMgmt.Codeunit.al", "approvalsmgmtcodeunital"},
+		{"Approvals-Mgmt.codeunit.al", "approvalsmgmtcodeunital"},
+		{"approvals_mgmt.codeunit.al", "approvalsmgmtcodeunital"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := canonicalSourceKey(c.in)
+		if got != c.want {
+			t.Errorf("canonicalSourceKey(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Negative case: when no .app contains a matching source file, the
+// fallback scan also fails — both phases must miss.
+func TestPreviewCache_Materialize_FallbackScan_NoMatch(t *testing.T) {
+	workspace := t.TempDir()
+	pkgCache := filepath.Join(workspace, ".alpackages")
+	if err := os.MkdirAll(pkgCache, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// An .app archive that has NO source for the requested object.
+	buildFakeApp(t, filepath.Join(pkgCache, "Other_Thing_1.0.0.0.app"), map[string]string{
+		"src/SomethingElse.Codeunit.al": "// noop\n",
+	})
+
+	c := newPreviewCache(workspace, t.TempDir())
+	_, err := c.materialize(
+		"al-preview:///allang/test-al-project/Codeunit/1535/Approvals%20Mgmt..dal",
+		[]string{pkgCache},
+	)
+	if err == nil {
+		t.Fatalf("expected error when no archive contains the source, got nil")
+	}
+	// Error message should mention both name-matched and content-scanned counts
+	// so the failure mode is clear from logs.
+	if !strings.Contains(err.Error(), "content-scanned") {
+		t.Errorf("expected error message to mention content scan, got %q", err.Error())
+	}
+}
+
 func TestPreviewCache_Materialize_MissingApp(t *testing.T) {
 	workspace := t.TempDir()
-	c := newPreviewCache(workspace)
+	c := newPreviewCache(workspace, t.TempDir())
 	_, err := c.materialize(
 		"al-preview:///allang/Nonexistent/Codeunit/1/Foo.dal",
 		[]string{filepath.Join(workspace, ".alpackages")},
@@ -295,7 +423,7 @@ func TestPreviewCache_Materialize_MissingApp(t *testing.T) {
 func TestTranslateCachePathToVirtual(t *testing.T) {
 	workspace := t.TempDir()
 	w := newMockWrapper()
-	w.previewCache = newPreviewCache(workspace)
+	w.previewCache = newPreviewCache(workspace, t.TempDir())
 	w.workspaceFolders = []WorkspaceFolder{{URI: PathToFileURI(workspace), Name: "ws"}}
 
 	// Real file URI (not in cache) → no translation.
@@ -366,7 +494,7 @@ func hoverMsg(t *testing.T, uri string) *Message {
 func TestDocumentSymbolHandler_TranslatesCachePath(t *testing.T) {
 	workspace := t.TempDir()
 	w := newMockWrapper()
-	w.previewCache = newPreviewCache(workspace)
+	w.previewCache = newPreviewCache(workspace, t.TempDir())
 	w.workspaceFolders = []WorkspaceFolder{{URI: PathToFileURI(workspace), Name: "ws"}}
 
 	cachePath := w.previewCache.cachePathFor("Base Application", "Codeunit", "1535", "Approvals Mgmt.")
@@ -400,7 +528,7 @@ func TestDocumentSymbolHandler_TranslatesCachePath(t *testing.T) {
 func TestHoverHandler_TranslatesCachePath(t *testing.T) {
 	workspace := t.TempDir()
 	w := newMockWrapper()
-	w.previewCache = newPreviewCache(workspace)
+	w.previewCache = newPreviewCache(workspace, t.TempDir())
 	w.workspaceFolders = []WorkspaceFolder{{URI: PathToFileURI(workspace), Name: "ws"}}
 
 	cachePath := w.previewCache.cachePathFor("Base Application", "Codeunit", "1535", "Approvals Mgmt.")

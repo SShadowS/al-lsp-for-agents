@@ -2,6 +2,16 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.11.2] - 2026-05-13
+
+### Fixed
+- **`al-preview:/` URI passthrough when the URI's "app" segment doesn't match a `.app` filename** -- in some workspaces (notably when the project doesn't declare an explicit `Base Application` dependency in `app.json`), MS AL LSP encodes the requesting **workspace name** as the al-preview URI's "app" segment (e.g. `al-preview:/allang/test-al-project/Codeunit/1535/Approvals Mgmt..dal` for a Base Application symbol). The wrapper's filename-based candidate matcher couldn't find a `.app` containing `_test-al-project_` and silently passed the URI through, leaving the v1.11.1 rewrite unable to fire. The wrapper now adds a content-scan fallback that scans every `.app` in `packageCachePaths` for one containing the requested source file, regardless of whether the archive's filename matches the URI's app segment.
+- **MS source-filename convention mismatch** -- Microsoft strips trailing dots and spaces when generating `.al` filenames inside `.app` archives. Object name `"Approvals Mgmt."` becomes `ApprovalsMgmt.Codeunit.al` in `src/OtherCapabilities/Approvals/`. The wrapper's strict-name candidates produced `Approvals Mgmt..Codeunit.al` (literal) and never matched. Added a canonical alphanumeric matcher (case-insensitive, punctuation-stripped) as a fallback so trivially-differently-punctuated names match.
+- **Unit tests no longer pollute the production preview-cache directory** -- the previous `newPreviewCache(workspaceRoot)` constructor derived `os.UserCacheDir()` as the cache base, so tests using `t.TempDir()` as workspace still wrote into the user's real preview-cache. Refactored to `newPreviewCache(workspaceRoot, cacheRoot)` with explicit cache root; production helper `newPreviewCacheForWorkspace` retains the original behavior for the wrapper. Tests now use `t.TempDir()` for both.
+
+### Added
+- New `test-al-project/agent-flows/` end-to-end test harness driven by the Claude Agent SDK. Runs a real Claude Code agent against a fixture AL project and asserts on tool-call patterns (LSP tool used, no fallback thrashing, `documentSymbol` returned IntegrationEvent symbols, final answer enumerates BC events). Catches LSP-tool-surface integration bugs that unit tests can't reach. Documented under `test-al-project/agent-flows/README.md`. Nightly-cron oriented, not every PR.
+
 ## [1.11.1] - 2026-05-12
 
 ### Fixed

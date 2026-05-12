@@ -45,22 +45,52 @@ import (
 // The materialized files are real AL source — the same content the AL
 // LSP would render through its al-preview content provider — so agents
 // can also read/grep them directly without any special handling.
+// previewCache state. `root` is the absolute directory under which
+// materialized .al files live. It is decoupled from `workspaceRoot`
+// so callers (production wires it from the workspace; tests inject a
+// t.TempDir) can choose freely — see newPreviewCache vs.
+// newPreviewCacheForWorkspace.
+//
+// objectIndex maps (objType, objID, objName) → app file path. Built
+// lazily by indexPackageCachePaths the first time a URI whose "app"
+// segment doesn't match any .app filename arrives. Lets the cache
+// recover from MS AL LSP URIs that embed the workspace name instead
+// of the source app name (see issue #41 follow-up).
 type previewCache struct {
 	workspaceRoot string
-	root          string // resolved cache root (outside workspace)
+	root          string
 
-	mu     sync.Mutex
-	hits   map[string]string // originalURI → cache file path
-	misses map[string]struct{}
+	mu          sync.Mutex
+	hits        map[string]string // originalURI → cache file path
+	misses      map[string]struct{}
+	objectIndex map[objectKey]string // (Type,ID,Name) → .app path; lazy
+	indexedFor  map[string]struct{}  // packagePaths fingerprints we've indexed
 }
 
-func newPreviewCache(workspaceRoot string) *previewCache {
+type objectKey struct {
+	objType string // canonical (lowercased)
+	objID   string
+	objName string // canonical (lowercased)
+}
+
+// newPreviewCache constructs a cache rooted at an explicit directory.
+// Use this from tests with t.TempDir() to keep test runs isolated from
+// the production cache.
+func newPreviewCache(workspaceRoot, cacheRoot string) *previewCache {
 	return &previewCache{
 		workspaceRoot: workspaceRoot,
-		root:          computeCacheRoot(workspaceRoot),
+		root:          cacheRoot,
 		hits:          make(map[string]string),
 		misses:        make(map[string]struct{}),
+		objectIndex:   make(map[objectKey]string),
+		indexedFor:    make(map[string]struct{}),
 	}
+}
+
+// newPreviewCacheForWorkspace is the production constructor: derives a
+// per-workspace cache directory under the user cache dir.
+func newPreviewCacheForWorkspace(workspaceRoot string) *previewCache {
+	return newPreviewCache(workspaceRoot, computeCacheRoot(workspaceRoot))
 }
 
 // computeCacheRoot returns the per-workspace cache directory. It lives
@@ -283,29 +313,114 @@ func (c *previewCache) resolveCachePath(filePath string) (string, bool) {
 
 // findAndExtractSource searches package cache paths for a .app archive
 // whose NavxManifest matches `app`, opens it as a zip, and extracts the
-// .al file matching the given object. Returns the file content + the
-// .app file path. Falls back to the first archive that contains a
-// matching .al when manifest matching is inconclusive.
+// .al file matching the given object.
+//
+// Strategy:
+//
+//	1. Filename-name match: look for "_<app>_" in .app filenames. Fast,
+//	   works for the common case where MS AL LSP encodes the source app
+//	   name into the al-preview URI.
+//	2. Content fallback: when (1) returns nothing or none of the matched
+//	   archives contain the target source file, scan EVERY .app archive
+//	   in packageCachePaths for one whose src/** tree contains
+//	   <objName>.<objType>.al. Necessary because in some configurations
+//	   (issue #41) MS AL LSP encodes the requesting workspace name as
+//	   the "app" segment instead of the source app — so the filename
+//	   filter would drop every real candidate.
+//
+// Returns (content, .app path) on success.
 func (c *previewCache) findAndExtractSource(
 	app, objType, objName string,
 	packageCachePaths []string,
 ) ([]byte, string, error) {
-	candidates := c.findAppCandidates(app, packageCachePaths)
-	if len(candidates) == 0 {
-		return nil, "", fmt.Errorf("previewCache: no .app archive matched app %q in %v",
-			app, packageCachePaths)
-	}
-
 	wantPattern := sourceFileNameCandidates(objName, objType)
 
+	// (1) Fast path — name match.
+	candidates := c.findAppCandidates(app, packageCachePaths)
 	for _, appPath := range candidates {
-		content, err := readSourceFromArchive(appPath, wantPattern)
-		if err == nil {
+		if content, err := readSourceFromArchive(appPath, wantPattern); err == nil {
 			return content, appPath, nil
 		}
 	}
-	return nil, "", fmt.Errorf("previewCache: %s %q not found in any of %d candidate apps",
-		objType, objName, len(candidates))
+
+	// (2) Slow path — content scan across every .app in packageCachePaths.
+	// We sort by version descending so a newer copy wins over a stale one
+	// (same convention as findAppCandidates).
+	all := c.findAllApps(packageCachePaths)
+	for _, appPath := range all {
+		// Skip ones we already tried in (1).
+		alreadyTried := false
+		for _, c := range candidates {
+			if strings.EqualFold(c, appPath) {
+				alreadyTried = true
+				break
+			}
+		}
+		if alreadyTried {
+			continue
+		}
+		if content, err := readSourceFromArchive(appPath, wantPattern); err == nil {
+			return content, appPath, nil
+		}
+	}
+
+	return nil, "", fmt.Errorf(
+		"previewCache: %s %q not found in any .app under %v "+
+			"(tried %d name-matched and %d content-scanned archives)",
+		objType, objName, packageCachePaths, len(candidates), len(all)-len(candidates),
+	)
+}
+
+// findAllApps returns every .app file under packageCachePaths, sorted by
+// version descending. Used as the fallback when name-matching against the
+// URI's app segment finds nothing (see issue #41 — MS AL LSP sometimes
+// encodes the workspace name as the app segment).
+func (c *previewCache) findAllApps(packageCachePaths []string) []string {
+	var found []struct {
+		path    string
+		version string
+	}
+	seen := make(map[string]bool)
+
+	for _, p := range packageCachePaths {
+		dir := p
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(c.workspaceRoot, dir)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if !strings.HasSuffix(strings.ToLower(name), ".app") {
+				continue
+			}
+			full := filepath.Join(dir, name)
+			key := strings.ToLower(full)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			found = append(found, struct {
+				path    string
+				version string
+			}{full, extractVersionFromAppFilename(name)})
+		}
+	}
+
+	sort.Slice(found, func(i, j int) bool {
+		return compareALVersions(found[i].version, found[j].version) > 0
+	})
+
+	out := make([]string, len(found))
+	for i, f := range found {
+		out[i] = f.path
+	}
+	return out
 }
 
 // findAppCandidates returns .app file paths whose filename matches the
@@ -423,11 +538,22 @@ func versionParts(v string) []uint64 {
 // conventionally `<NameWithoutSpaces>.<ObjectType>.al`, but Microsoft
 // also uses `<Name>.<Type>.al` (spaces preserved) in some apps.
 func sourceFileNameCandidates(objName, objType string) []string {
+	// Build a permissive set of expected filenames. Microsoft's actual
+	// convention is `<NameWithoutSpacesOrTrailingDots>.<ObjectType>.al`
+	// (e.g. "Approvals Mgmt." → "ApprovalsMgmt.Codeunit.al" — trailing
+	// dot dropped, spaces stripped), so we include several variants.
+	// readSourceFromArchive also falls back to canonical-alnum comparison
+	// (see canonicalSourceKey) so any of these is enough to trigger a
+	// match against MS's filenames regardless of punctuation differences.
+	trimmed := strings.TrimRight(objName, ".")
+	noSpaceTrimmed := strings.ReplaceAll(trimmed, " ", "")
 	candidates := []string{
-		objName + "." + objType + ".al",
-		strings.ReplaceAll(objName, " ", "") + "." + objType + ".al",
+		objName + "." + objType + ".al",        // "Approvals Mgmt..Codeunit.al"
+		trimmed + "." + objType + ".al",        // "Approvals Mgmt.Codeunit.al"
+		strings.ReplaceAll(objName, " ", "") +
+			"." + objType + ".al", // "ApprovalsMgmt..Codeunit.al"
+		noSpaceTrimmed + "." + objType + ".al", // "ApprovalsMgmt.Codeunit.al"  ← MS
 	}
-	// Also tolerate hyphens being substituted for the space (rare).
 	if strings.Contains(objName, " ") {
 		candidates = append(candidates,
 			strings.ReplaceAll(objName, " ", "-")+"."+objType+".al",
@@ -436,9 +562,39 @@ func sourceFileNameCandidates(objName, objType string) []string {
 	return candidates
 }
 
+// canonicalSourceKey reduces a filename to its alphanumeric, lowercase
+// signature so trivially-differently-punctuated names match. Used as a
+// fallback for readSourceFromArchive when none of the literal candidates
+// hit (MS's filenames sometimes drop trailing dots, sometimes preserve
+// them, and the wrapper has no way to know which a given build emitted).
+//
+//	"Approvals Mgmt..Codeunit.al"  → "approvalsmgmtcodeunital"
+//	"ApprovalsMgmt.Codeunit.al"    → "approvalsmgmtcodeunital"
+//	"Approvals-Mgmt.codeunit.al"   → "approvalsmgmtcodeunital"
+func canonicalSourceKey(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + 32)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // readSourceFromArchive opens .app as zip, skipping the 40-byte NAVX
 // header, and returns the bytes of the first `src/**/<name>` matching
-// any of `wantNames` (case-insensitive on basename).
+// any of `wantNames`. Matching is two-phase:
+//
+//  1. Case-insensitive basename equality against any of wantNames.
+//  2. Canonical alphanumeric comparison (canonicalSourceKey) for the
+//     first wantName — catches MS variants like "ApprovalsMgmt.Codeunit.al"
+//     when the literal candidate was "Approvals Mgmt..Codeunit.al".
 func readSourceFromArchive(appPath string, wantNames []string) ([]byte, error) {
 	const navxHeaderSize = 40
 
@@ -467,25 +623,45 @@ func readSourceFromArchive(appPath string, wantNames []string) ([]byte, error) {
 	for _, n := range wantNames {
 		wantSet[strings.ToLower(n)] = true
 	}
+	// Canonical signature of the first (most authoritative) wantName.
+	// Used as a fuzzy fallback when none of the strict candidates hit.
+	var wantCanonical string
+	if len(wantNames) > 0 {
+		wantCanonical = canonicalSourceKey(wantNames[0])
+	}
 
+	var fuzzyMatch *zip.File
 	for _, file := range zr.File {
 		base := strings.ToLower(filepath.Base(file.Name))
-		if !wantSet[base] {
-			continue
+		if wantSet[base] {
+			return readZipFile(file)
 		}
-		rc, err := file.Open()
-		if err != nil {
-			return nil, fmt.Errorf("open %s: %w", file.Name, err)
+		if fuzzyMatch == nil && wantCanonical != "" &&
+			canonicalSourceKey(filepath.Base(file.Name)) == wantCanonical {
+			fuzzyMatch = file
 		}
-		data, readErr := io.ReadAll(rc)
-		closeErr := rc.Close()
-		if readErr != nil {
-			return nil, readErr
-		}
-		if closeErr != nil {
-			return nil, closeErr
-		}
-		return data, nil
+	}
+	if fuzzyMatch != nil {
+		return readZipFile(fuzzyMatch)
 	}
 	return nil, fmt.Errorf("no matching source file in %s (wanted any of %v)", appPath, wantNames)
+}
+
+// readZipFile is a small helper that reads + closes a zip entry. Extracted
+// so the strict and fuzzy match paths in readSourceFromArchive share the
+// same I/O routine.
+func readZipFile(file *zip.File) ([]byte, error) {
+	rc, err := file.Open()
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", file.Name, err)
+	}
+	data, readErr := io.ReadAll(rc)
+	closeErr := rc.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return data, nil
 }
