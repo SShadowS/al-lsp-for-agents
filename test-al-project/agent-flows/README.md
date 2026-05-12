@@ -46,18 +46,32 @@ records `(name, input, result_preview, is_error)`.
 
 ## Adding a scenario
 
-A scenario is a single Python module that:
-1. Defines `PROMPT` (the user-style task description).
-2. Builds `ClaudeAgentOptions` with at minimum `cwd`, `allowed_tools`, and
-   a `PostToolUse` hook.
-3. Iterates `query(...)` to capture tool calls + final result.
-4. Runs a list of `assert_*` functions, each raising `AssertionFailed` with
-   a diagnostic message.
+Shared infrastructure lives in `_harness.py`. A scenario is a small
+Python module that defines:
 
-Reuse the `CapturedRun` dataclass + `make_post_tool_hook` helper from
-`find_events.py` — those are the only shared pieces today. Keep each
-scenario as a single file until at least 3 exist; only then refactor a
-common runner.
+- `PROMPT` — the user-style task description the agent runs against.
+- One or more assertion functions (each raising `AssertionFailed` on
+  failure), and an `ASSERTIONS` list `[(label, fn), ...]`.
+- `if __name__ == "__main__": sys.exit(run_and_report(name, PROMPT, ASSERTIONS))`.
+
+Two assertions are usually included from `_harness`:
+- `assert_lsp_used` — the LSP tool was called at all.
+- `make_assert_minimal_denied_attempts()` — under N escape-hatch
+  attempts (default 5). High counts signal the agent thrashed because
+  LSP failed to deliver.
+
+The harness ships with a `PreToolUse` deny hook that hard-blocks any
+tool not in `DEFAULT_ALLOWED_TOOLS = {LSP, ToolSearch, Read, TodoWrite}`.
+Scenarios can extend with `allowed_tools=frozenset({..., "Bash"})` etc.,
+but the deny-by-default keeps the test honest.
+
+## Current scenarios
+
+| Scenario | Validates |
+|---|---|
+| `find_events.py` | al-preview URI rewrite + content-scan + canonical filename match (v1.11.2). Agent enumerates IntegrationEvents in Base App's Codeunit 1535. |
+| `subscribe_to_event.py` | `enrichEventReferenceHover` overlay (v1.11.0 Phase B). Agent hovers on event-name literal inside `[EventSubscriber(...)]`. |
+| `find_callers.py` | al-call-hierarchy integration. Agent uses `incomingCalls` to find subscribers of a local IntegrationEvent. |
 
 ## Assertion style
 
