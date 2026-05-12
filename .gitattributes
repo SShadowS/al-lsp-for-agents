@@ -1,2 +1,7 @@
 # Force LF line endings for shell scripts (prevents breakage on Windows checkout)
 *.sh text eol=lf
+
+# Snapshot golden files for wrapper tests. Byte-for-byte compared
+# against materialize() output (which always writes LF). Without this,
+# Windows autocrlf would inject CRLF and every snapshot test would fail.
+al-language-server-go/wrapper/testdata/snapshots/* text eol=lf
