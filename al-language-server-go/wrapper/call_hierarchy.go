@@ -31,7 +31,19 @@ type CallHierarchyServer struct {
 	clientWriter   io.Writer
 	clientWriterMu sync.Mutex
 
+	// sanitizeOutbound, if set, is called on every message forwarded to the
+	// client. The wrapper registers a callback that runs the URI sanitizer
+	// and feeds rewrite counts into the shared uriSanitizationStats counter
+	// so call-hierarchy malformation is visible alongside AL-LS malformation.
+	sanitizeOutbound func(*Message)
+
 	logFunc func(format string, args ...interface{})
+}
+
+// SetSanitizer registers a callback invoked on every message about to be
+// forwarded to the client. Used by ALLSPWrapper to centralize URI sanitation.
+func (s *CallHierarchyServer) SetSanitizer(fn func(*Message)) {
+	s.sanitizeOutbound = fn
 }
 
 // NewCallHierarchyServer creates a new CallHierarchyServer
@@ -170,6 +182,9 @@ func (s *CallHierarchyServer) readResponses() {
 
 			if writer != nil {
 				s.log("Forwarding notification to client: %s", msg.Method)
+				if s.sanitizeOutbound != nil {
+					s.sanitizeOutbound(msg)
+				}
 				if err := WriteMessage(writer, msg); err != nil {
 					s.log("Error forwarding notification: %v", err)
 				}

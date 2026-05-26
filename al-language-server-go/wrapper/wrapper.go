@@ -105,6 +105,10 @@ type ALLSPWrapper struct {
 	logMu         sync.Mutex
 	logWriteCount int
 
+	// URI sanitation telemetry. Counts how many malformed file URIs the
+	// wrapper has had to fix in outbound messages. See uri_sanitizer.go.
+	uriStats uriSanitizationStats
+
 	// Initialization
 	initialized bool
 	initMu      sync.Mutex
@@ -392,6 +396,17 @@ func (w *ALLSPWrapper) readStderr() {
 	}
 }
 
+// writeToClient sanitizes the message and writes it to the client. All
+// outbound traffic to the client must go through this function so that
+// malformed URIs from upstream (AL LS, call-hierarchy) never reach the
+// editor — see uri_sanitizer.go for the rewrite rules.
+func (w *ALLSPWrapper) writeToClient(msg *Message) error {
+	if n, orig, norm := SanitizeOutboundMessage(msg); n > 0 {
+		w.uriStats.record(w.Log, "AL-LS->client", msg.Method, n, orig, norm)
+	}
+	return WriteMessage(w.clientWriter, msg)
+}
+
 func (w *ALLSPWrapper) readFromLSP() error {
 	for {
 		msg, err := ReadMessage(w.stdout)
@@ -424,7 +439,7 @@ func (w *ALLSPWrapper) readFromLSP() error {
 			if msg.Method == "textDocument/publishDiagnostics" {
 				w.logPublishDiagnostics(msg.Params)
 			}
-			if err := WriteMessage(w.clientWriter, msg); err != nil {
+			if err := w.writeToClient(msg); err != nil {
 				w.Log("Error forwarding notification: %v", err)
 			}
 		} else {
@@ -577,7 +592,7 @@ func (w *ALLSPWrapper) readFromClient() error {
 			w.Log("Error handling message: %v", err)
 			if msg.IsRequest() {
 				errResp := NewErrorResponse(msg.ID, InternalError, err.Error())
-				WriteMessage(w.clientWriter, errResp)
+				w.writeToClient(errResp)
 			}
 			continue
 		}
@@ -585,7 +600,7 @@ func (w *ALLSPWrapper) readFromClient() error {
 		// Send response if any
 		if response != nil {
 			w.Log("Sending response to client: id=%s", response.GetIDString())
-			if err := WriteMessage(w.clientWriter, response); err != nil {
+			if err := w.writeToClient(response); err != nil {
 				w.Log("Error writing response: %v", err)
 			}
 		}
@@ -624,6 +639,9 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 		// Shutdown call hierarchy server first
 		if w.callHierarchyServer != nil {
 			w.callHierarchyServer.Shutdown()
+		}
+		if total := w.uriStats.Total(); total > 0 {
+			w.Log("[URI-FIX] session totals: %d malformed file URIs normalized before reaching the client", total)
 		}
 		w.SendNotificationToLSP("exit", nil)
 		os.Exit(0)
@@ -1071,7 +1089,7 @@ func (w *ALLSPWrapper) SendNotificationToClient(method string, params interface{
 		Method:  method,
 		Params:  paramsJSON,
 	}
-	if err := WriteMessage(w.clientWriter, msg); err != nil {
+	if err := w.writeToClient(msg); err != nil {
 		w.Log("Failed to send notification to client: %v", err)
 	}
 }
@@ -1377,6 +1395,11 @@ func (w *ALLSPWrapper) PreviewCache() *previewCache {
 func (w *ALLSPWrapper) startCallHierarchyServer() {
 	w.callHierarchyServer = NewCallHierarchyServer(w.Log)
 	w.callHierarchyServer.SetClientWriter(w.clientWriter)
+	w.callHierarchyServer.SetSanitizer(func(msg *Message) {
+		if n, orig, norm := SanitizeOutboundMessage(msg); n > 0 {
+			w.uriStats.record(w.Log, "call-hierarchy->client", msg.Method, n, orig, norm)
+		}
+	})
 
 	executable := w.callHierarchyServer.FindExecutable()
 	if executable == "" {

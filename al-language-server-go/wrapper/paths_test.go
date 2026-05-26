@@ -342,6 +342,112 @@ func TestIsVirtualURI(t *testing.T) {
 	}
 }
 
+func TestStripWindowsNamespacePrefix(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"drive prefix", `\\?\C:\foo\bar.al`, `C:\foo\bar.al`},
+		{"drive prefix lowercase", `\\?\c:\foo`, `c:\foo`},
+		{"unc prefix", `\\?\UNC\srv\share\f.al`, `\\srv\share\f.al`},
+		{"unc prefix mixed case", `\\?\unc\srv\share\f.al`, `\\srv\share\f.al`},
+		{"no prefix", `C:\foo\bar.al`, `C:\foo\bar.al`},
+		{"unix path", `/home/u/f.al`, `/home/u/f.al`},
+		{"too short", `\\?`, `\\?`},
+		{"empty", ``, ``},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := stripWindowsNamespacePrefix(tt.in)
+			if got != tt.want {
+				t.Errorf("stripWindowsNamespacePrefix(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeFileURI(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "malformed AL LS output (issue trace)",
+			in:   `file://%3F\C:\Users\arbo\Documents\source\repos\Document-Output-Extensions\Cloud\Al\Page\Page%206175339%20CDO%20Variant%20Entry%20Wizard.al`,
+			want: `file:///C:/Users/arbo/Documents/source/repos/Document-Output-Extensions/Cloud/Al/Page/Page%206175339%20CDO%20Variant%20Entry%20Wizard.al`,
+		},
+		{
+			name: "malformed with forward slashes",
+			in:   `file://%3F/C:/Users/arbo/foo.al`,
+			want: `file:///C:/Users/arbo/foo.al`,
+		},
+		{
+			name: "malformed UNC backslash",
+			in:   `file://%3F\UNC\srv\share\f.al`,
+			want: `file:////srv/share/f.al`,
+		},
+		{
+			name: "malformed UNC forward slash",
+			in:   `file://%3F/UNC/srv/share/f.al`,
+			want: `file:////srv/share/f.al`,
+		},
+		{
+			name: "bare extended path (drive)",
+			in:   `\\?\C:\foo\bar.al`,
+			want: `file:///C:/foo/bar.al`,
+		},
+		{
+			name: "bare extended path (UNC)",
+			in:   `\\?\UNC\srv\share\f.al`,
+			want: `file:////srv/share/f.al`,
+		},
+		{
+			name: "well-formed URI passes through",
+			in:   `file:///C:/foo/bar.al`,
+			want: `file:///C:/foo/bar.al`,
+		},
+		{
+			name: "virtual URI passes through",
+			in:   `al-preview:/allang/SomeApp/Codeunit/123/MyCodeunit.dal`,
+			want: `al-preview:/allang/SomeApp/Codeunit/123/MyCodeunit.dal`,
+		},
+		{
+			name: "empty",
+			in:   ``,
+			want: ``,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeFileURI(tt.in)
+			if got != tt.want {
+				t.Errorf("NormalizeFileURI(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPathToFileURI_StripsExtendedPrefix(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"drive", `\\?\C:\foo\bar.al`, `file:///C:/foo/bar.al`},
+		{"drive with space", `\\?\C:\foo bar\baz.al`, `file:///C:/foo%20bar/baz.al`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := PathToFileURI(tt.in)
+			if got != tt.want {
+				t.Errorf("PathToFileURI(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestVSCodeExtensionDirs_ContainsAllVariants(t *testing.T) {
 	// Verify all expected variants are in the list
 	expectedDirs := map[string]bool{

@@ -117,6 +117,75 @@ func GetALLSPExecutable(extensionPath string) string {
 	return filepath.Join(extensionPath, "bin", binDir, executable)
 }
 
+// stripWindowsNamespacePrefix removes the Windows extended-length path prefix
+// (\\?\ or \\?\UNC\) so the result is a normal Windows path that downstream
+// URL/URI code can handle. Returns the input unchanged if no prefix is present.
+//
+// Examples:
+//   \\?\C:\foo            -> C:\foo
+//   \\?\UNC\srv\share\f   -> \\srv\share\f
+func stripWindowsNamespacePrefix(p string) string {
+	// UNC form first (longer prefix wins).
+	if len(p) >= 8 {
+		head := strings.ToUpper(p[:8])
+		if head == `\\?\UNC\` {
+			return `\\` + p[8:]
+		}
+	}
+	if len(p) >= 4 && p[:4] == `\\?\` {
+		return p[4:]
+	}
+	return p
+}
+
+// NormalizeFileURI rewrites malformed file URIs the wrapper has been observed
+// to receive from the Microsoft AL Language Server when a path was canonicalized
+// through Windows' extended-length form (\\?\). The .NET System.Uri constructor
+// produces hybrid output like "file://%3F\C:\foo\bar.al" (percent-encoded '?',
+// raw backslashes, missing third slash) which Bun/Node's pathToFileURL rejects.
+//
+// Returns the input unchanged when it already looks well-formed or is not a
+// recognized malformed shape. Safe to call on any URI; virtual URIs (e.g.
+// al-preview:) are returned untouched.
+func NormalizeFileURI(uri string) string {
+	if uri == "" {
+		return uri
+	}
+
+	// Bare Windows extended path mistakenly passed as a URI.
+	// Must run before IsVirtualURI: "\\?\C:\foo" contains a drive colon
+	// that IsVirtualURI misreads as a scheme separator.
+	if strings.HasPrefix(uri, `\\?\`) {
+		return PathToFileURI(stripWindowsNamespacePrefix(uri))
+	}
+
+	// Skip other non-file URIs (al-preview:, untitled:, etc.).
+	if IsVirtualURI(uri) {
+		return uri
+	}
+
+	// Malformed AL LS output: "file://%3F\C:\..." or "file://%3F/C:/...".
+	// The encoded "%3F" is the '?' from \\?\. The path body is already URI-
+	// encoded by the producer (spaces as %20, etc.), so we only swap
+	// backslashes for forward slashes — decoding and re-encoding would
+	// double-escape existing percent sequences.
+	if strings.HasPrefix(uri, "file://%3F") {
+		rest := uri[len("file://%3F"):]
+		rest = strings.TrimLeft(rest, `\/`)
+		// Encoded UNC body: "UNC\srv\share\..." or "UNC/srv/share/...".
+		if len(rest) >= 4 && strings.EqualFold(rest[:4], `UNC\`) {
+			return "file:////" + strings.ReplaceAll(rest[4:], `\`, `/`)
+		}
+		if len(rest) >= 4 && strings.EqualFold(rest[:4], `UNC/`) {
+			return "file:////" + rest[4:]
+		}
+		// Drive-letter form.
+		return "file:///" + strings.ReplaceAll(rest, `\`, `/`)
+	}
+
+	return uri
+}
+
 // IsVirtualURI returns true if the URI uses a non-file scheme (e.g. al-preview:)
 // that represents a virtual document managed by the AL LSP, not a file on disk.
 func IsVirtualURI(uri string) bool {
@@ -138,6 +207,13 @@ func IsVirtualURI(uri string) bool {
 
 // FileURIToPath converts a file:// URI to a local file path
 func FileURIToPath(uri string) (string, error) {
+	// Defense in depth: if upstream handed us a malformed URI (e.g.
+	// file://%3F\C:\... from the AL Language Server) rewrite it to a
+	// well-formed file URI before parsing. Outbound traffic to the client
+	// also goes through the sanitizer (uri_sanitizer.go); this catches
+	// inbound URIs the wrapper resolves internally.
+	uri = NormalizeFileURI(uri)
+
 	if !strings.HasPrefix(uri, "file://") {
 		return uri, nil // Return as-is if not a file URI
 	}
@@ -166,6 +242,10 @@ func FileURIToPath(uri string) (string, error) {
 
 // PathToFileURI converts a local file path to a file:// URI
 func PathToFileURI(path string) string {
+	// Strip Windows extended-length prefix (\\?\ or \\?\UNC\) before any
+	// slash conversion so we don't bake the literal '?' into the URI.
+	path = stripWindowsNamespacePrefix(path)
+
 	// Normalize path separators
 	path = filepath.ToSlash(path)
 
