@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.11.3] - 2026-05-26
+
+### Fixed
+- **Malformed Windows extended-path file URIs from MS AL Language Server crash Claude Code** -- the MS AL LSP (.NET) sometimes emits hybrid file URIs like `file://%3F\C:\Users\...\foo.al` when it canonicalizes a path through Windows' `\\?\` extended-length form. Bun/Node's `pathToFileURL` rejects these (the percent-encoded `?` is not a valid URL component) and crashes the Claude Code CLI. The wrapper now sanitizes every outbound message: a field-agnostic JSON walker rewrites `file://%3F\...` and bare `\\?\...` to standard `file:///C:/...` form (drive and UNC variants), including URI keys in `WorkspaceEdit.changes`. Inbound traffic to the AL LSP is left untouched so the server's URI-keyed file tracking stays consistent. A byte-scan fast path skips healthy payloads. Telemetry: first occurrence logs WARN with a sample, every 100th logs DEBUG, session total logged at exit.
+
 ## [1.11.2] - 2026-05-13
 
 ### Fixed
