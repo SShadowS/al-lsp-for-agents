@@ -2,6 +2,14 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.11.4] - 2026-06-04
+
+### Fixed
+- **`workspaceSymbol` empty-results race on the first search of a session** -- the AL Language Server builds its workspace symbol index asynchronously after `initialize`, so the first `al/symbolSearch` could land before the index was warm and return `[]` even when the symbol existed (an agent would then wrongly conclude the symbol does not exist). The wrapper now retries an empty result with bounded backoff (~1.6s total) while no search has yet succeeded this session; once any search returns results, `0` is treated as a genuine miss with no further retries.
+
+### Changed
+- The upstream Claude Code bug where `workspaceSymbol` sent an empty query ([anthropics/claude-code#17149](https://github.com/anthropics/claude-code/issues/17149)) is fixed in Claude Code 2.1.x. The wrapper's empty-query handling (returns `[]` plus a one-time warning instead of erroring) is kept as a fallback for older Claude Code versions and non-Claude LSP clients, and its warning text was reworded to reflect the fix. Documentation across the repo updated to mark the bug resolved.
+
 ## [1.11.3] - 2026-05-26
 
 ### Fixed
