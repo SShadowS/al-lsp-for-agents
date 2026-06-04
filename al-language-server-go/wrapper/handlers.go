@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 // TextDocumentPositionParams represents LSP text document position parameters
@@ -984,10 +985,10 @@ func overlayLocalEventPublishers(w WrapperInterface, raw json.RawMessage, uri st
 	}
 	// Parse al-call-hierarchy's publishers list (camelCase JSON).
 	var pubs []struct {
-		Name      string `json:"name"`
-		Detail    string `json:"detail"`
-		Kind      uint32 `json:"kind"`
-		Range     struct {
+		Name   string `json:"name"`
+		Detail string `json:"detail"`
+		Kind   uint32 `json:"kind"`
+		Range  struct {
 			Start struct{ Line, Character uint32 } `json:"start"`
 			End   struct{ Line, Character uint32 } `json:"end"`
 		} `json:"range"`
@@ -1032,10 +1033,10 @@ func overlayLocalEventPublishers(w WrapperInterface, raw json.RawMessage, uri st
 func walkAndOverlay(
 	entries []map[string]interface{},
 	pubs []struct {
-		Name      string `json:"name"`
-		Detail    string `json:"detail"`
-		Kind      uint32 `json:"kind"`
-		Range     struct {
+		Name   string `json:"name"`
+		Detail string `json:"detail"`
+		Kind   uint32 `json:"kind"`
+		Range  struct {
 			Start struct{ Line, Character uint32 } `json:"start"`
 			End   struct{ Line, Character uint32 } `json:"end"`
 		} `json:"range"`
@@ -1125,9 +1126,8 @@ func countDocumentSymbols(raw json.RawMessage) int {
 	return len(arr)
 }
 
-// emptyWorkspaceSymbolWarned is set the first time we surface the
-// "Claude Code can't pass a workspaceSymbol query" warning so users see the
-// upstream limitation without being spammed on every call.
+// emptyWorkspaceSymbolWarned is set the first time we surface the empty-query
+// warning so users see the anomaly without being spammed on every call.
 var emptyWorkspaceSymbolWarned atomic.Bool
 
 func warnOnceEmptyWorkspaceSymbol(w WrapperInterface) {
@@ -1136,92 +1136,40 @@ func warnOnceEmptyWorkspaceSymbol(w WrapperInterface) {
 	}
 	w.SendNotificationToClient("window/showMessage", map[string]interface{}{
 		"type": 2, // Warning
-		"message": "workspaceSymbol called with an empty query. Claude Code's LSP " +
-			"tool surface (operation: \"workspaceSymbol\", filePath, line, character) " +
-			"has no `query` parameter — the AL LSP rejects empty queries, so this " +
-			"call returns no results. This is a Claude Code limitation, not an AL LSP " +
-			"bug. Use documentSymbol(file) for per-file symbols or goToDefinition " +
-			"to navigate into dependency objects.",
+		"message": "workspaceSymbol called with an empty query — the AL LSP requires " +
+			"a non-empty search term, so this call returns no results. Claude Code " +
+			"2.1.x+ passes the query through (anthropics/claude-code#17149); if you see " +
+			"this on a recent Claude Code, the query was genuinely empty. Pass a symbol " +
+			"name, or use documentSymbol(file) for per-file symbols.",
 	})
 }
 
-// WorkspaceSymbolHandler handles workspace/symbol
-type WorkspaceSymbolHandler struct{}
+// symbolSearchEverReturnedResults flips true the first time al/symbolSearch
+// yields >0 results in this process, and never flips back.
+//
+// Until it is set, a 0-result response is ambiguous: the symbol genuinely may
+// not exist, OR the AL LS symbol index is still warming up. The AL LS builds
+// its workspace symbol index asynchronously after initialize, so the first
+// workspace symbol search of a session can race the index and come back empty
+// even though the symbol exists (observed: a search 40ms after initialize
+// returns [], the same search seconds later returns matches). Once any search
+// returns results we know the index is warm and treat 0 as a genuine miss.
+var symbolSearchEverReturnedResults atomic.Bool
 
-func (h *WorkspaceSymbolHandler) ShouldHandle(method string) bool {
-	return method == "workspace/symbol"
+// coldSymbolSearchBackoffs are the waits between retries when al/symbolSearch
+// returns 0 results and the index has never warmed this session. One-time
+// cost at session start; bounded so the (synchronous) client read loop is
+// never stalled for more than their sum (~1.6s).
+var coldSymbolSearchBackoffs = []time.Duration{
+	300 * time.Millisecond,
+	500 * time.Millisecond,
+	800 * time.Millisecond,
 }
 
-func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
-	var params WorkspaceSymbolParams
-	if err := json.Unmarshal(msg.Params, &params); err != nil {
-		w.Log("Failed to parse workspaceSymbol params: %v", err)
-		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
-	}
-
-	query := params.Query
-
-	// Empty/whitespace queries: return [] AND surface the upstream bug.
-	//
-	// Background: Claude Code's LSP tool surface for workspaceSymbol takes
-	// only filePath/line/character — there is no `query` parameter — so the
-	// agent literally cannot pass a search term. The AL LSP itself rejects
-	// empty queries.
-	//
-	// Returning -32602 caused agents to retry-loop. Returning [] silently
-	// would hide the bug from users. Compromise: return [] (agent moves on)
-	// AND raise a window/showMessage warning the first time per session so
-	// the human sees the upstream issue and can file/track it. The log line
-	// stays loud either way.
-	if strings.TrimSpace(query) == "" {
-		w.Log("Empty workspace/symbol query — Claude Code's LSP tool cannot pass a query parameter. " +
-			"Returning [] so agents don't retry-loop; user is warned via window/showMessage. " +
-			"Upstream: Claude Code LSP tool surface lacks a `query` field on workspaceSymbol.")
-		warnOnceEmptyWorkspaceSymbol(w)
-		return &Message{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Result:  json.RawMessage("[]"),
-		}, nil
-	}
-
-	// Workaround: Claude Code sometimes sends file paths instead of symbol names
-	if strings.Contains(query, "/") || strings.Contains(query, "\\") {
-		query = ExtractSymbolFromPath(query)
-		w.Log("Extracted symbol from path: %s", query)
-	}
-
-	// Use al/symbolSearch exclusively - workspace/symbol deadlocks the AL LSP
-	// Confirmed: deadlock persists even with proper server request handling
-	w.Log("Sending al/symbolSearch for query: %s", query)
-	response, err := w.SendRequestToLSP("al/symbolSearch", ALSymbolSearchParams{Query: query})
-	if err != nil {
-		w.Log("Failed to send al/symbolSearch request: %v", err)
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
-	}
-
-	if response.Error != nil {
-		return nil, &Message{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Error:   response.Error,
-		}
-	}
-
-	// Convert al/symbolSearch response to standard LSP SymbolInformation[]
-	var searchResult ALSymbolSearchResponse
-	if err := json.Unmarshal(response.Result, &searchResult); err != nil {
-		w.Log("Failed to parse al/symbolSearch response: %v", err)
-		// Return raw result as fallback
-		return &Message{
-			JSONRPC: "2.0",
-			ID:      msg.ID,
-			Result:  response.Result,
-		}, nil
-	}
-
-	symbols := make([]SymbolInformation, 0, len(searchResult.Symbols))
-	for _, s := range searchResult.Symbols {
+// convertALSymbols maps al/symbolSearch results to LSP SymbolInformation.
+func convertALSymbols(in []ALSymbol) []SymbolInformation {
+	symbols := make([]SymbolInformation, 0, len(in))
+	for _, s := range in {
 		uri := s.Path
 		if uri != "" {
 			uri = strings.ReplaceAll(uri, "\\", "/")
@@ -1241,6 +1189,109 @@ func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 				Range: Range{Start: Position{Line: 0, Character: 0}, End: Position{Line: 0, Character: 0}},
 			},
 		})
+	}
+	return symbols
+}
+
+// WorkspaceSymbolHandler handles workspace/symbol
+type WorkspaceSymbolHandler struct{}
+
+func (h *WorkspaceSymbolHandler) ShouldHandle(method string) bool {
+	return method == "workspace/symbol"
+}
+
+func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	var params WorkspaceSymbolParams
+	if err := json.Unmarshal(msg.Params, &params); err != nil {
+		w.Log("Failed to parse workspaceSymbol params: %v", err)
+		return nil, NewErrorResponse(msg.ID, InvalidParams, "Invalid parameters")
+	}
+
+	query := params.Query
+
+	// Empty/whitespace queries: return [] AND surface the anomaly.
+	//
+	// History: Claude Code <2.1.x hardcoded an empty query for workspaceSymbol
+	// (anthropics/claude-code#17149) — its LSP tool surface had no `query`
+	// field, so the agent literally could not pass a search term. That is
+	// fixed: 2.1.x+ passes the query through. We keep this guard because the
+	// AL LSP still rejects empty queries, and an empty query can still arrive
+	// from an old Claude Code, a non-Claude LSP client, or genuinely empty
+	// input.
+	//
+	// Returning -32602 caused agents to retry-loop. Returning [] silently
+	// would hide the anomaly. Compromise: return [] (agent moves on) AND raise
+	// a window/showMessage warning the first time per session. The log line
+	// stays loud either way.
+	if strings.TrimSpace(query) == "" {
+		w.Log("Empty workspace/symbol query — the AL LSP requires a non-empty search term. " +
+			"Returning [] so agents don't retry-loop; user is warned via window/showMessage. " +
+			"Claude Code 2.1.x+ passes the query through (anthropics/claude-code#17149).")
+		warnOnceEmptyWorkspaceSymbol(w)
+		return &Message{
+			JSONRPC: "2.0",
+			ID:      msg.ID,
+			Result:  json.RawMessage("[]"),
+		}, nil
+	}
+
+	// Workaround: Claude Code sometimes sends file paths instead of symbol names
+	if strings.Contains(query, "/") || strings.Contains(query, "\\") {
+		query = ExtractSymbolFromPath(query)
+		w.Log("Extracted symbol from path: %s", query)
+	}
+
+	// Use al/symbolSearch exclusively - workspace/symbol deadlocks the AL LSP
+	// Confirmed: deadlock persists even with proper server request handling
+	//
+	// Retry on an empty result while the symbol index may still be cold (see
+	// symbolSearchEverReturnedResults). Once any search has returned results
+	// this session, 0 is a genuine miss and we return immediately.
+	var symbols []SymbolInformation
+	for attempt := 0; ; attempt++ {
+		w.Log("Sending al/symbolSearch for query: %s (attempt %d)", query, attempt+1)
+		response, err := w.SendRequestToLSP("al/symbolSearch", ALSymbolSearchParams{Query: query})
+		if err != nil {
+			w.Log("Failed to send al/symbolSearch request: %v", err)
+			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
+
+		if response.Error != nil {
+			return nil, &Message{
+				JSONRPC: "2.0",
+				ID:      msg.ID,
+				Error:   response.Error,
+			}
+		}
+
+		// Convert al/symbolSearch response to standard LSP SymbolInformation[]
+		var searchResult ALSymbolSearchResponse
+		if err := json.Unmarshal(response.Result, &searchResult); err != nil {
+			w.Log("Failed to parse al/symbolSearch response: %v", err)
+			// Return raw result as fallback
+			return &Message{
+				JSONRPC: "2.0",
+				ID:      msg.ID,
+				Result:  response.Result,
+			}, nil
+		}
+
+		symbols = convertALSymbols(searchResult.Symbols)
+		if len(symbols) > 0 {
+			symbolSearchEverReturnedResults.Store(true)
+			break
+		}
+
+		// 0 results. Retry only while the index has never warmed this session
+		// and we have backoffs left — otherwise this is a genuine miss.
+		if symbolSearchEverReturnedResults.Load() || attempt >= len(coldSymbolSearchBackoffs) {
+			break
+		}
+		backoff := coldSymbolSearchBackoffs[attempt]
+		w.Log("al/symbolSearch returned 0 results and the symbol index has never warmed "+
+			"this session; retrying in %s to ride out AL LS index warmup (attempt %d/%d)",
+			backoff, attempt+1, len(coldSymbolSearchBackoffs))
+		time.Sleep(backoff)
 	}
 
 	w.Log("Converted %d al/symbolSearch results to SymbolInformation", len(symbols))

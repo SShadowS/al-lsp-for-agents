@@ -28,8 +28,8 @@ python test_lsp_go.py --wrapper go --show-logs
 | Definition | Go to definition (translated to `al/gotodefinition`) |
 | DocumentSymbol | List symbols in a file |
 | WorkspaceSymbol | Search symbols across workspace |
-| WorkspaceSymbol (empty) | Empty query returns helpful error |
-| WorkspaceSymbol (path) | Path-as-query workaround for Claude Code bug |
+| WorkspaceSymbol (empty) | Empty query returns [] + one-time warning (fallback for pre-2.1.x Claude Code) |
+| WorkspaceSymbol (path) | Path-as-query fallback (older Claude Code clients) |
 | References | Find all references to a symbol |
 | CallHierarchy | Returns proper "not supported" error |
 
@@ -43,8 +43,8 @@ Successful run:
   [+] PASS: Definition - Found definition
   [+] PASS: DocumentSymbol - Found 1 symbol(s)
   [+] PASS: WorkspaceSymbol - Found 131 symbol(s)
-  [+] PASS: WorkspaceSymbol (empty) - Correctly returned error for empty query
-  [+] PASS: WorkspaceSymbol (path) - Path workaround worked
+  [+] PASS: WorkspaceSymbol (empty) - Returns [] (no retry-loop for Claude Code)
+  [+] PASS: WorkspaceSymbol (path) - Path fallback worked
   [+] PASS: References - Found 4 reference(s)
   [+] PASS: CallHierarchy (unsupported) - Correctly returned MethodNotFound error
 

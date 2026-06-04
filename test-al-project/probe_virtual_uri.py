@@ -319,7 +319,9 @@ def main():
             dump(f"08-ws-{q.replace(' ','_').replace('.','')}", r)
 
         # 9. workspace/symbol with empty query — should return [] AND fire a
-        # window/showMessage warning once so the user sees the Claude Code bug.
+        # window/showMessage warning once. Empty queries are an anomaly now that
+        # Claude Code 2.1.x passes the query through (anthropics/claude-code#17149);
+        # the [] + warning path stays as a fallback for older clients.
         print("[9] workspace/symbol with empty query (Phase B: [] + one-shot user warning)")
         notif_before = len(lsp.notifications)
         r = lsp.request("workspace/symbol", {"query": ""})

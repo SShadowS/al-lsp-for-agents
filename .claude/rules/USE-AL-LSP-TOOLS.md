@@ -10,7 +10,7 @@ For `.al` files, **use the LSP tool instead of Grep/Glob/Read** for anything abo
 - "Where is X used?" -> `findReferences`, not Grep
 - "What type is X? What fields does this table have?" -> `hover`, not Read
 - "What's in this file?" -> `documentSymbol`, not Read
-- "Find a symbol by name" -> `workspaceSymbol`, not Grep
+- "Find a symbol by name" -> `workspaceSymbol` with a `query`, not Grep (needs Claude Code 2.1.x+)
 - "How many references? Code quality?" -> `codeLens`
 
 ## When Grep/Glob is fine

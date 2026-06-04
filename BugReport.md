@@ -1,5 +1,11 @@
 # Bug: LSP workspaceSymbol operation sends empty query parameter
 
+> **RESOLVED (Claude Code 2.1.x).** Filed as
+> [anthropics/claude-code#17149](https://github.com/anthropics/claude-code/issues/17149).
+> Claude Code 2.1.x exposes a `query` field on the `workspaceSymbol` operation
+> and passes it through; verified on 2.1.162. The report below is kept as a
+> historical record.
+
 ## Description
 
 The Claude Code LSP tool's `workspaceSymbol` operation does not pass a search query to the language server, making it non-functional. The tool sends `{"query": ""}` (empty string) instead of a user-provided search term.

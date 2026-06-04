@@ -262,9 +262,10 @@ class LSPTester:
     def test_workspace_symbol_empty_query(self) -> TestResult:
         """Test workspace/symbol with empty query.
 
-        Returns an empty array, not an error. Claude Code's LSP tool surface
-        for workspaceSymbol can't pass a query parameter, so erroring caused
-        agents to retry-loop. Returning [] lets the agent move on.
+        Returns an empty array, not an error. Claude Code <2.1.x hardcoded an
+        empty query for workspaceSymbol (anthropics/claude-code#17149); erroring
+        caused agents to retry-loop, so the wrapper returns [] to let the agent
+        move on. Kept as a fallback now that 2.1.x+ passes the query through.
         """
         _, response = self.request("workspace/symbol", {
             "query": ""

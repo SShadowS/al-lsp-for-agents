@@ -23,6 +23,11 @@ type mockWrapper struct {
 	callHierarchyServer *CallHierarchyServer
 	previewCache        *previewCache
 	logs                []string
+
+	// lspResponder, when set, supplies the response for SendRequestToLSP
+	// instead of the default {"success":true}. Lets tests script per-call
+	// replies (e.g. cold-then-warm al/symbolSearch results).
+	lspResponder func(method string, params interface{}) (*Message, error)
 }
 
 type lspCall struct {
@@ -54,8 +59,12 @@ func (m *mockWrapper) EnsureProjectInitialized(filePath string) error {
 
 func (m *mockWrapper) SendRequestToLSP(method string, params interface{}) (*Message, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.lspRequests = append(m.lspRequests, lspCall{Method: method, Params: params})
+	responder := m.lspResponder
+	m.mu.Unlock()
+	if responder != nil {
+		return responder(method, params)
+	}
 	return &Message{
 		JSONRPC: "2.0",
 		Result:  json.RawMessage(`{"success":true}`),

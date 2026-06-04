@@ -54,7 +54,7 @@ The `.lsp.json` must reference the correct wrapper binary for the platform:
   - Handles file opening requirements automatically
   - Initializes workspaces and waits for project load
   - Supports hover, documentSymbol, references, workspaceSymbol
-  - Workaround for Claude Code's workspace/symbol query bug
+  - workspaceSymbol routes to al/symbolSearch with cold-index retry (the old Claude Code empty-query bug, anthropics/claude-code#17149, is fixed in 2.1.x)
   - Proper semver sorting to find newest AL extension (e.g., 17.x > 9.x)
 
 ## Logging

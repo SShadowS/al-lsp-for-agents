@@ -97,19 +97,15 @@ Claude can use these LSP operations on AL files:
 | `prepareCallHierarchy` | Working | Get call hierarchy item at position |
 | `incomingCalls` | Working | Find callers of a procedure |
 | `outgoingCalls` | Working | Find calls made by a procedure |
-| `workspaceSymbol` | Bug | See [Known Issues](KnownIssues.md) |
+| `workspaceSymbol` | Working | Pass a `query`; needs Claude Code 2.1.x+ |
 
 ## Known Issues
 
-### workspaceSymbol Returns Empty Results
+### workspaceSymbol (resolved in Claude Code 2.1.x)
 
-Claude Code's LSP tool has a bug where it doesn't pass the required `query` parameter for `workspaceSymbol`. This causes the operation to always return 0 symbols.
+Older Claude Code versions hardcoded an empty `query` for `workspaceSymbol`, so it always returned 0 symbols ([anthropics/claude-code#17149](https://github.com/anthropics/claude-code/issues/17149)). Fixed client-side in Claude Code 2.1.x — pass a search term and it works.
 
-**Workarounds:**
-- Use `documentSymbol` to list symbols in a specific file
-- Use `Grep` to search for symbol names across the workspace
-
-See [KnownIssues.md](KnownIssues.md) for full details and technical analysis.
+On older clients, use `documentSymbol` (per-file symbols) or `Grep` as fallbacks. See [KnownIssues.md](KnownIssues.md) for full details.
 
 ## License
 
