@@ -60,11 +60,19 @@ func discoverMcpBackend(extensionPath string) (mcpBackend, bool) {
 type ALMcpServer struct {
 	mu         sync.Mutex
 	cmd        *exec.Cmd
+	stdin      io.WriteCloser
+	stderr     io.ReadCloser
 	client     *MCPClient
 	tools      map[string]bool
 	projectDir string
 	backend    mcpBackend
 	logFunc    func(format string, args ...interface{})
+
+	// exited is set by the background reaper when the current child's
+	// cmd.Wait() returns. It is guarded by mu so liveness can be checked
+	// without racing the os/exec internals that Wait mutates (reading
+	// cmd.ProcessState directly is unsafe before Wait returns).
+	exited bool
 }
 
 func NewALMcpServer(logFunc func(format string, args ...interface{})) *ALMcpServer {
@@ -91,11 +99,18 @@ func (s *ALMcpServer) SetExtensionPath(extensionPath string) bool {
 }
 
 // EnsureRunning lazily spawns + initializes almcp for the given project.
+// The mutex is deliberately held for the whole setup so concurrent callers
+// serialize: only one spawn+initialize happens at a time.
 func (s *ALMcpServer) EnsureRunning(projectDir, pkgCache string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.cmd != nil && s.cmd.ProcessState == nil {
+	if s.cmd != nil && !s.exited {
 		return nil
+	}
+	// A previous child exists but has exited (reaper set s.exited). Tear down
+	// its stale resources before respawning.
+	if s.cmd != nil {
+		s.stopLocked()
 	}
 	if s.backend.command == "" {
 		return fmt.Errorf("no almcp backend available")
@@ -118,6 +133,20 @@ func (s *ALMcpServer) EnsureRunning(projectDir, pkgCache string) error {
 		s.cmd = nil
 		return fmt.Errorf("failed to start almcp: %w", err)
 	}
+	s.stdin = stdin
+	s.stderr = stderr
+	s.exited = false
+	// Reap the child and mark it exited when Wait returns; otherwise the
+	// alive-check above would treat a dead child as "still running" forever.
+	c := s.cmd
+	go func() {
+		_ = c.Wait()
+		s.mu.Lock()
+		if s.cmd == c {
+			s.exited = true
+		}
+		s.mu.Unlock()
+	}()
 	s.log("started pid=%d (%s)", s.cmd.Process.Pid, s.backend.kind)
 	addProcessToJob(s.cmd.Process)
 	go drainReader(stderr, s.log)
@@ -170,9 +199,18 @@ func (s *ALMcpServer) stopLocked() {
 	if s.cmd != nil && s.cmd.Process != nil {
 		s.cmd.Process.Kill()
 	}
+	if s.stdin != nil {
+		s.stdin.Close()
+		s.stdin = nil
+	}
+	if s.stderr != nil {
+		s.stderr.Close()
+		s.stderr = nil
+	}
 	s.cmd = nil
 	s.client = nil
 	s.tools = map[string]bool{}
+	s.exited = false
 }
 
 // Shutdown terminates the almcp process.

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestMcpBackendArgs(t *testing.T) {
@@ -84,6 +85,52 @@ func TestALMcpServerLifecycle(t *testing.T) {
 	}
 	if res.IsError {
 		t.Fatalf("unexpected isError")
+	}
+	s.Shutdown()
+}
+
+func TestALMcpServerRespawnAfterCrash(t *testing.T) {
+	fake := buildFakeAlmcp(t)
+
+	s := NewALMcpServer(func(string, ...interface{}) {})
+	s.backend = mcpBackend{kind: "bundled", command: fake} // inject fake
+	if err := s.EnsureRunning("C:/proj", "C:/proj/.alpackages"); err != nil {
+		t.Fatalf("EnsureRunning: %v", err)
+	}
+
+	// Simulate an unexpected child death (no Shutdown).
+	if err := s.cmd.Process.Kill(); err != nil {
+		t.Fatalf("Kill: %v", err)
+	}
+
+	// Wait for the background reaper to mark the child exited (~2s cap).
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		s.mu.Lock()
+		exited := s.exited
+		s.mu.Unlock()
+		if exited {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("child never marked exited after kill (background Wait not reaping)")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Respawning must succeed, not hang on a stale "already running" guard.
+	if err := s.EnsureRunning("C:/proj", "C:/proj/.alpackages"); err != nil {
+		t.Fatalf("EnsureRunning after crash: %v", err)
+	}
+	if !s.HasTool("al_symbolrelations") {
+		t.Fatalf("expected al_symbolrelations after respawn")
+	}
+	res, err := s.CallTool("al_symbolrelations", map[string]interface{}{"parameters": map[string]string{"symbolName": "Customer"}})
+	if err != nil {
+		t.Fatalf("CallTool after respawn: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected isError after respawn")
 	}
 	s.Shutdown()
 }
