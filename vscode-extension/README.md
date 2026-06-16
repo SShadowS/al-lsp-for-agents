@@ -22,6 +22,8 @@ When using GitHub Copilot in agent mode, these tools become available:
 | `bclsp_codeQualityDiagnostics` | Unused procedures, high complexity, long methods, etc. |
 | `bclsp_documentSymbols` | Get the symbol tree for an AL file |
 | `bclsp_renameSymbol` | Rename an AL symbol across all files in the workspace |
+| `bclsp_symbolRelations` | Find how an object relates to others (extends, implements, source table, extended by) |
+| `bclsp_inspectPage` | Inspect a page's control tree or action tree (incl. dependency pages) |
 
 ### Enriched Hover
 
@@ -97,8 +99,11 @@ The extension starts a Go wrapper that combines:
 
 1. **Microsoft AL Language Server** — compiler-powered definitions, hover, references, and diagnostics
 2. **al-call-hierarchy** — tree-sitter-powered call hierarchy, code lens, code quality diagnostics, and property extraction
+3. **Microsoft `almcp` MCP server** — backs symbol relations and page inspection. Preferred via the nuget `al` dotnet global tool, with a fallback to the AL extension's bundled `almcp`.
 
-The wrapper merges capabilities from both servers and presents a single enriched LSP interface.
+The wrapper merges capabilities from all three and presents a single enriched LSP interface.
+
+> **Note:** `bclsp_inspectPage` requires the nuget `al` build tools (`dotnet tool install --global microsoft.dynamics.businesscentral.development.tools --prerelease`). The extension-bundled `almcp` does not include page inspection.
 
 ## Also Available for Claude Code
 

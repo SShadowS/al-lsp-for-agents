@@ -20,6 +20,8 @@ AL Language Server wrappers for AI-powered Business Central development. Works w
 - **Document Symbols** - List all symbols in a file
 - **Find References** - Find all references to a symbol
 - **Call Hierarchy** - Find incoming and outgoing calls for procedures
+- **Symbol Relations** - How an object relates to others (extends, implements, source table, extended-by)
+- **Inspect Page** - A page's control tree or action tree, including dependency pages
 - **Multi-project support** - Workspaces with multiple AL apps
 
 ## Prerequisites
@@ -98,6 +100,8 @@ Claude can use these LSP operations on AL files:
 | `incomingCalls` | Working | Find callers of a procedure |
 | `outgoingCalls` | Working | Find calls made by a procedure |
 | `workspaceSymbol` | Working | Pass a `query`; needs Claude Code 2.1.x+ |
+| `symbolRelations` | Working | Related symbols (extends/implements/source table/extended-by) |
+| `inspectPage` | Working | Page control/action tree (requires nuget al tool) |
 
 ## Known Issues
 

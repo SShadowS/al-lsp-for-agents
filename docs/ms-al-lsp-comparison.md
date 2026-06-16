@@ -69,7 +69,7 @@ Columns:
 
 Different philosophies. MS MCP = **build/deploy lifecycle**. Wrapper LM tools = **code navigation/analysis**.
 
-| Capability | MS MCP `launchmcpserver` (15) | Wrapper VS Code LM tools (10) |
+| Capability | MS MCP `launchmcpserver` (15) | Wrapper VS Code LM tools (12) |
 |---|:---:|:---:|
 | go to definition | ❌ | ✅ `bclsp_goToDefinition` |
 | hover (enriched) | ❌ | ✅ `bclsp_hover` |
@@ -80,24 +80,24 @@ Different philosophies. MS MCP = **build/deploy lifecycle**. Wrapper LM tools = 
 | document symbols | ❌ | ✅ `bclsp_documentSymbols` |
 | rename symbol | ❌ | ✅ `bclsp_renameSymbol` |
 | symbol search (deps, no source) | ✅ `al_symbolsearch` | ➖ workspaceSymbol (project scope only) |
-| **symbol relations** (extends/implements/sourcetable) | ✅ `al_symbolrelations` | ❌ |
+| **symbol relations** (extends/implements/sourcetable) | ✅ `al_symbolrelations` | ✅ `bclsp_symbolRelations` (MCP, EditorServices fallback) |
 | compile / build / get diagnostics | ✅ `al_compile` `al_build` `al_getdiagnostics` | ❌ |
 | download symbols | ✅ `al_downloadsymbols` | ❌ |
 | publish / run tests | ✅ `al_publish` `al_run_tests` | ❌ |
-| inspect page (control/action tree) | ✅ `al_inspectpage` | ❌ |
+| inspect page (control/action tree) | ✅ `al_inspectpage` | ✅ `bclsp_inspectPage` (requires nuget al tool) |
 | translations (XLIFF search/write) | ✅ `al_searchtranslations` `al_writetranslation` | ❌ |
 | auth (Entra ID) | ✅ `al_auth_login` `al_auth_logout` | ❌ |
 | add project / package deps | ✅ `al_addproject` `al_getpackagedependencies` | ❌ |
 
 - MS MCP has **zero** call-graph / reference navigation. Pure compile-deploy-symbolsearch.
 - Wrapper has **zero** build/compile/publish/test/download-symbols.
-- `al_symbolrelations` and `al_inspectpage` are useful agent primitives the wrapper lacks; al-call-hierarchy's tree-sitter parse already has the data to build both.
+- Symbol relations and page inspection are now implemented in the wrapper (`bclsp_symbolRelations`, `bclsp_inspectPage`). The wrapper owns its own `almcp` MCP backend, preferring the nuget `al` dotnet tool (15 tools incl. `al_inspectpage`) and falling back to the extension-bundled `almcp` (12 tools, no `al_inspectpage`). `bclsp_inspectPage` requires the nuget `al` tool. `bclsp_symbolRelations` tries the MCP tool first but Microsoft's `al_symbolrelations` is currently broken by an upstream DI bug (`SymbolRelationsService` not registered), so the wrapper falls back to the inner AL LS native `al/symbolRelations` (see [ms-almcp-symbolrelations-di-bug.md](ms-almcp-symbolrelations-di-bug.md)).
 
 ## 3. Takeaways
 
 1. **No collision on release.** Neither new MS server touches call hierarchy, code lens, or code-quality. The differentiator survives.
 2. **Wrapper wraps the old server.** It spawns EditorServices (custom `al/*`), not the new standard `launchlspserver`. Re-targeting the standalone would give a cleaner protocol, stdio-native, no VS-Code-extension dependency, and dodge the semantic-tokens NRE — **but** the standalone drops codeAction/implementation/typeHierarchy/codeLens and keeps no `al/symbolSearch`, so passthrough coverage would shrink. Net: not a free win.
-3. **Steal-worthy from MS MCP:** `al_symbolrelations` and `al_inspectpage`.
+3. **Implemented from MS MCP:** `al_symbolrelations` and `al_inspectpage` are no longer a gap — the wrapper now exposes both as `bclsp_symbolRelations` and `bclsp_inspectPage` (LSP methods `al/symbolRelations` and `al/inspectPage`), backed by its own `almcp` MCP server (nuget `al` tool preferred, extension-bundled `almcp` fallback). `inspectPage` requires the nuget `al` tool. `symbolRelations` runs via the MCP tool with an EditorServices native fallback, because Microsoft's `al_symbolrelations` MCP tool is broken by an upstream DI bug (`SymbolRelationsService` not registered); see [ms-almcp-symbolrelations-di-bug.md](ms-almcp-symbolrelations-di-bug.md). The wrapper will prefer the MCP tool automatically once Microsoft fixes it.
 4. **Positioning vs MS:** "they build & deploy, we understand the code."
 
 ## Reproducing
