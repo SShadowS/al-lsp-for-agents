@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -27,11 +28,14 @@ type MCPClient struct {
 	r   *bufio.Reader
 	log func(format string, args ...interface{})
 
-	mu sync.Mutex
-	id int
+	writeMu sync.Mutex
+	id      atomic.Int64
 
 	pendingMu sync.Mutex
 	pending   map[int]chan mcpResponse
+
+	initMu      sync.Mutex
+	initialized bool
 
 	readerOnce sync.Once
 }
@@ -82,10 +86,14 @@ func (c *MCPClient) readLoop() {
 
 func (c *MCPClient) failAll(err error) {
 	c.pendingMu.Lock()
-	defer c.pendingMu.Unlock()
-	for id, ch := range c.pending {
+	pending := c.pending
+	c.pending = make(map[int]chan mcpResponse)
+	c.pendingMu.Unlock()
+	if c.log != nil && len(pending) > 0 {
+		c.log("mcp: reader closed, failing %d pending request(s): %v", len(pending), err)
+	}
+	for _, ch := range pending {
 		ch <- mcpResponse{Err: &RPCError{Code: InternalError, Message: err.Error()}}
-		delete(c.pending, id)
 	}
 }
 
@@ -94,18 +102,18 @@ func (c *MCPClient) send(obj interface{}) error {
 	if err != nil {
 		return err
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	_, err = c.w.Write(append(b, '\n'))
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if _, err = c.w.Write(b); err != nil {
+		return err
+	}
+	_, err = c.w.Write([]byte{'\n'})
 	return err
 }
 
 func (c *MCPClient) request(method string, params interface{}, timeout time.Duration) (json.RawMessage, *RPCError) {
 	c.startReader()
-	c.mu.Lock()
-	c.id++
-	id := c.id
-	c.mu.Unlock()
+	id := int(c.id.Add(1))
 
 	ch := make(chan mcpResponse, 1)
 	c.pendingMu.Lock()
@@ -116,6 +124,9 @@ func (c *MCPClient) request(method string, params interface{}, timeout time.Dura
 		c.pendingMu.Lock()
 		delete(c.pending, id)
 		c.pendingMu.Unlock()
+		if c.log != nil {
+			c.log("mcp: send %s failed: %v", method, err)
+		}
 		return nil, &RPCError{Code: InternalError, Message: err.Error()}
 	}
 
@@ -126,12 +137,21 @@ func (c *MCPClient) request(method string, params interface{}, timeout time.Dura
 		c.pendingMu.Lock()
 		delete(c.pending, id)
 		c.pendingMu.Unlock()
+		if c.log != nil {
+			c.log("mcp: timeout waiting for %s after %s", method, timeout)
+		}
 		return nil, &RPCError{Code: InternalError, Message: fmt.Sprintf("timeout waiting for %s", method)}
 	}
 }
 
-// Initialize performs the MCP handshake.
+// Initialize performs the MCP handshake. It is idempotent: a second call
+// returns nil without re-sending the initialize request.
 func (c *MCPClient) Initialize(clientName string) error {
+	c.initMu.Lock()
+	defer c.initMu.Unlock()
+	if c.initialized {
+		return nil
+	}
 	_, rpcErr := c.request("initialize", map[string]interface{}{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]interface{}{},
@@ -140,7 +160,11 @@ func (c *MCPClient) Initialize(clientName string) error {
 	if rpcErr != nil {
 		return fmt.Errorf("mcp initialize failed: %s", rpcErr.Message)
 	}
-	return c.send(map[string]interface{}{"jsonrpc": "2.0", "method": "notifications/initialized", "params": map[string]interface{}{}})
+	if err := c.send(map[string]interface{}{"jsonrpc": "2.0", "method": "notifications/initialized", "params": map[string]interface{}{}}); err != nil {
+		return err
+	}
+	c.initialized = true
+	return nil
 }
 
 // ListTools returns the names of tools the server exposes.
@@ -168,7 +192,7 @@ func (c *MCPClient) ListTools() ([]string, error) {
 func (c *MCPClient) CallTool(name string, args interface{}) (*ToolCallResult, error) {
 	res, rpcErr := c.request("tools/call", map[string]interface{}{"name": name, "arguments": args}, 60*time.Second)
 	if rpcErr != nil {
-		return nil, fmt.Errorf("%s", rpcErr.Message)
+		return nil, fmt.Errorf("tools/call %s: %s", name, rpcErr.Message)
 	}
 	var out ToolCallResult
 	if err := json.Unmarshal(res, &out); err != nil {
