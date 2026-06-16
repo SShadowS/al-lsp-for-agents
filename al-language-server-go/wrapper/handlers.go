@@ -1605,26 +1605,36 @@ func (h *SymbolRelationsHandler) ShouldHandle(method string) bool {
 }
 
 func (h *SymbolRelationsHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
-	srv := w.GetALMcpServer()
-	if srv == nil {
-		return nil, NewErrorResponse(msg.ID, InternalError, "almcp server not available")
-	}
-	projectDir, pkgCache := mcpProjectContext(w)
-	if err := srv.EnsureProject(projectDir, pkgCache); err != nil {
-		return nil, NewErrorResponse(msg.ID, InternalError, "almcp unavailable: "+err.Error())
-	}
-
 	var params interface{}
 	json.Unmarshal(msg.Params, &params)
-	res, err := srv.CallTool("al_symbolrelations", map[string]interface{}{"parameters": params})
+
+	// Prefer almcp (richer dependency-scope contract) when it actually works.
+	if srv := w.GetALMcpServer(); srv != nil {
+		projectDir, pkgCache := mcpProjectContext(w)
+		if err := srv.EnsureProject(projectDir, pkgCache); err == nil {
+			res, callErr := srv.CallTool("al_symbolrelations", map[string]interface{}{"parameters": params})
+			if callErr == nil && !res.IsError {
+				body, _ := reshapeToolResult(res)
+				return &Message{JSONRPC: "2.0", ID: msg.ID, Result: body}, nil
+			}
+			// almcp's al_symbolrelations is currently broken by an upstream MS DI
+			// bug (SymbolRelationsService not registered). Fall back to the inner
+			// AL LS native al/symbolRelations, which is unaffected.
+			w.Log("al_symbolrelations via MCP unavailable (callErr=%v), falling back to EditorServices al/symbolRelations", callErr)
+		} else {
+			w.Log("almcp EnsureProject failed (%v), falling back to EditorServices al/symbolRelations", err)
+		}
+	}
+
+	// Fallback: native al/symbolRelations on the inner Microsoft AL LS.
+	resp, err := w.SendRequestToLSP("al/symbolRelations", params)
 	if err != nil {
-		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		return nil, NewErrorResponse(msg.ID, InternalError, "al/symbolRelations failed: "+err.Error())
 	}
-	body, isErr := reshapeToolResult(res)
-	if isErr {
-		w.Log("al/symbolRelations returned isError: %s", string(body))
+	if resp.Error != nil {
+		return nil, &Message{JSONRPC: "2.0", ID: msg.ID, Error: resp.Error}
 	}
-	return &Message{JSONRPC: "2.0", ID: msg.ID, Result: body}, nil
+	return &Message{JSONRPC: "2.0", ID: msg.ID, Result: resp.Result}, nil
 }
 
 // InspectPageHandler handles al/inspectPage via the almcp backend.

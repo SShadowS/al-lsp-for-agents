@@ -44,3 +44,23 @@ func TestInspectPageHandlerName(t *testing.T) {
 		t.Fatalf("should not handle other methods")
 	}
 }
+
+func TestSymbolRelationsFallbackToEditorServices(t *testing.T) {
+	m := &mockWrapper{
+		lspResponder: func(method string, params interface{}) (*Message, error) {
+			if method != "al/symbolRelations" {
+				t.Fatalf("expected al/symbolRelations, got %s", method)
+			}
+			return &Message{JSONRPC: "2.0", Result: json.RawMessage(`{"relations":[{"type":"Extends"}],"truncated":false}`)}, nil
+		},
+	}
+	h := &SymbolRelationsHandler{}
+	id := json.RawMessage(`1`)
+	out, errMsg := h.Handle(&Message{ID: &id, Method: "al/symbolRelations", Params: json.RawMessage(`{"symbolName":"Customer","symbolKind":"Table"}`)}, m)
+	if errMsg != nil {
+		t.Fatalf("unexpected error response: %+v", errMsg)
+	}
+	if out == nil || !strings.Contains(string(out.Result), `"relations"`) {
+		t.Fatalf("expected relations result, got %+v", out)
+	}
+}
