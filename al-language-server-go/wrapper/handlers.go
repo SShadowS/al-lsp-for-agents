@@ -1627,6 +1627,43 @@ func (h *SymbolRelationsHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 	return &Message{JSONRPC: "2.0", ID: msg.ID, Result: body}, nil
 }
 
+// InspectPageHandler handles al/inspectPage via the almcp backend.
+type InspectPageHandler struct{}
+
+func (h *InspectPageHandler) ShouldHandle(method string) bool {
+	return method == "al/inspectPage"
+}
+
+func (h *InspectPageHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	srv := w.GetALMcpServer()
+	if srv == nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, "almcp server not available")
+	}
+	projectDir, pkgCache := mcpProjectContext(w)
+	if err := srv.EnsureRunning(projectDir, pkgCache); err != nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, "almcp unavailable: "+err.Error())
+	}
+	// Capability gate: bundled almcp lacks al_inspectpage. Surface a clear,
+	// actionable error instead of a confusing "Unknown tool" or empty result.
+	if !srv.HasTool("al_inspectpage") {
+		return nil, NewErrorResponse(msg.ID, MethodNotFound,
+			"al/inspectPage requires the AL build tools (nuget 'al' tool). Install with: "+
+				"dotnet tool install --global microsoft.dynamics.businesscentral.development.tools --prerelease")
+	}
+
+	var params interface{}
+	json.Unmarshal(msg.Params, &params)
+	res, err := srv.CallTool("al_inspectpage", map[string]interface{}{"parameters": params})
+	if err != nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+	}
+	body, isErr := reshapeToolResult(res)
+	if isErr {
+		w.Log("al/inspectPage returned isError: %s", string(body))
+	}
+	return &Message{JSONRPC: "2.0", ID: msg.ID, Result: body}, nil
+}
+
 // mcpProjectContext derives the project dir + package cache for almcp from the
 // wrapper's current workspace folders. Falls back to cwd when none is known.
 func mcpProjectContext(w WrapperInterface) (projectDir, pkgCache string) {

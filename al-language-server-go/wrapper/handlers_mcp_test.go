@@ -34,3 +34,13 @@ func TestReshapeToolResultPlainText(t *testing.T) {
 		t.Fatalf("expected text passthrough, got %s", string(out))
 	}
 }
+
+func TestInspectPageHandlerName(t *testing.T) {
+	h := &InspectPageHandler{}
+	if !h.ShouldHandle("al/inspectPage") {
+		t.Fatalf("should handle al/inspectPage")
+	}
+	if h.ShouldHandle("al/symbolRelations") {
+		t.Fatalf("should not handle other methods")
+	}
+}
