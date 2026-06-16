@@ -1,0 +1,34 @@
+{
+  "serverInfo": {},
+  "capabilities": {
+    "textDocumentSync": 1,
+    "hoverProvider": true,
+    "completionProvider": {
+      "triggerCharacters": [
+        ".",
+        "\""
+      ]
+    },
+    "signatureHelpProvider": {
+      "triggerCharacters": [
+        "(",
+        ","
+      ]
+    },
+    "definitionProvider": true,
+    "referencesProvider": true,
+    "documentHighlightProvider": true,
+    "documentSymbolProvider": true,
+    "workspaceSymbolProvider": {
+      "resolveProvider": false
+    },
+    "codeActionProvider": false,
+    "documentFormattingProvider": true,
+    "documentRangeFormattingProvider": true,
+    "renameProvider": true,
+    "foldingRangeProvider": true,
+    "implementationProvider": false,
+    "typeHierarchyProvider": false,
+    "inlayHintProvider": false
+  }
+}

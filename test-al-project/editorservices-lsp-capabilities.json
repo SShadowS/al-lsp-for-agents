@@ -1,0 +1,58 @@
+{
+  "extensionDir": "ms-dynamics-smb.al-18.0.2293710",
+  "serverInfo": {},
+  "capabilities": {
+    "textDocumentSync": 2,
+    "hoverProvider": true,
+    "completionProvider": {
+      "resolveProvider": false,
+      "triggerCharacters": [
+        ".",
+        ":",
+        "\"",
+        "/",
+        "<"
+      ]
+    },
+    "signatureHelpProvider": {
+      "triggerCharacters": [
+        "("
+      ]
+    },
+    "definitionProvider": false,
+    "referencesProvider": true,
+    "documentHighlightProvider": true,
+    "documentSymbolProvider": true,
+    "workspaceSymbolProvider": {
+      "resolveProvider": false
+    },
+    "codeActionProvider": true,
+    "codeLensProvider": {
+      "resolveProvider": true
+    },
+    "documentFormattingProvider": true,
+    "documentRangeFormattingProvider": true,
+    "renameProvider": true,
+    "workspace": {
+      "supported": true,
+      "changeNotifications": true
+    },
+    "executeCommandProvider": {
+      "commands": [
+        "al/runCodeAction"
+      ]
+    },
+    "semanticTokensProvider": {
+      "legend": {
+        "tokenTypes": [],
+        "tokenModifiers": []
+      },
+      "range": true,
+      "full": true
+    },
+    "foldingRangeProvider": false,
+    "implementationProvider": true,
+    "typeHierarchyProvider": true,
+    "inlayHintProvider": false
+  }
+}

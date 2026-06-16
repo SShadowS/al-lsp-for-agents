@@ -1,0 +1,827 @@
+{
+  "tools": [
+    {
+      "name": "al_auth_logout",
+      "description": "Clears cached Entra ID (Azure AD) authentication tokens. Parameters: None. Returns: Confirmation that token cache was cleared. Use cases: Switch to a different account, resolve authentication errors from expired/invalid tokens, sign out for security. Next steps: Run al_auth_login to authenticate with a different account.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "al_compile",
+      "description": "Compiles the AL workspace and returns diagnostics without generating .app package. Fastest option for validation-only scenarios (no .app output). When to use: Quick syntax/semantic validation during development. Use al_build instead when you need the .app package or multi-project workspace builds. Parameters: Set OnlyErrors=true to filter out warnings (recommended). MaxDiagnosticsPerCompilation limits output (default 100). EnableCodeAnalysis=true enables code analyzers (CodeCop, AppSourceCop, etc.) during compilation. CodeAnalyzers specifies which analyzers to run (e.g. ['${CodeCop}','${AppSourceCop}']). Returns: Compilation result with Succeeded flag and array of diagnostics (Severity, Code, Description, Location). Prerequisites: Run al_downloadsymbols first if compilation fails with missing symbol errors. Use cases: Quick syntax/semantic validation, checking code changes before full build. Use al_build instead when you need the .app package.\nReturns: Response from a compilation operation containing success status, diagnostics, and optional message",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "description": "Optional compilation options: Set 'OnlyErrors=true' to return only error diagnostics (filters out warnings, info, hidden - recommended), 'MaxDiagnosticsPerCompilation' to limit results (default: 100)",
+            "type": "object",
+            "properties": {
+              "onlyErrors": {
+                "description": "When true, only error diagnostics are returned (warnings, info, and hidden diagnostics are filtered out). Recommended value is true.",
+                "type": "boolean"
+              },
+              "maxDiagnosticsPerCompilation": {
+                "description": "Maximum number of diagnostics to return per compilation (default: 100)",
+                "type": "integer"
+              },
+              "enableCodeAnalysis": {
+                "description": "Set to true to enable code analysis with analyzers (CodeCop, AppSourceCop, etc.). When not specified, uses the server's startup configuration.",
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "codeAnalyzers": {
+                "description": "Code analyzers to use. Well-known values: '${CodeCop}', '${AppSourceCop}', '${PerTenantExtensionCop}', '${UICop}'. When not specified, uses the server's startup configuration.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_auth_login",
+      "description": "Authenticates to Entra ID (Azure AD) for Business Central cloud operations. Opens browser for interactive login. Parameters: tenant (domain or GUID, default 'common'), environmentType='OnPrem'|'Sandbox'|'Production', environmentName (e.g., 'sandbox'), applicationFamily (optional), usernameHint for account selection. noCache=true clears cache before login. Returns: Authentication result. Tokens cached securely for subsequent operations. Use cases: Authenticate before al_downloadsymbols or al_publish for cloud. Not needed for on-premise Windows auth. Next steps: Run al_downloadsymbols or al_publish.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "tenant": {
+            "description": "Tenant to authenticate against (domain or GUID). Defaults to 'common'.",
+            "type": "string",
+            "default": null
+          },
+          "environmentType": {
+            "description": "Environment type: 'OnPrem', 'Sandbox', or 'Production'. When omitted, defaults to the value from launch.json or 'Sandbox'.",
+            "type": "string",
+            "default": null
+          },
+          "environmentName": {
+            "description": "Environment name (e.g., 'sandbox', 'production'). Optional.",
+            "type": "string",
+            "default": null
+          },
+          "applicationFamily": {
+            "description": "Application family for the cloud server (optional).",
+            "type": "string",
+            "default": null
+          },
+          "usernameHint": {
+            "description": "Optional username hint for selecting an account.",
+            "type": "string",
+            "default": null
+          },
+          "noCache": {
+            "description": "Set to true to clear token cache before login.",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_getdiagnostics",
+      "description": "Retrieves compilation diagnostics (errors, warnings, info, hints) from AL code. Parameters: Scope by filePath (single .al file), folderPath (recursive), or projectPath (AL project folder). Filter by severities (['error','warning']) and areas (['AL']). Use limit to cap results (default 200, max 500). Returns: List of diagnostics with severity, code, message, and file location. Use cases: Inspect build failures, find all errors in a project, check specific file for issues. Next steps: Fix reported issues in source files, then run al_build to verify fixes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "description": "Diagnostics scope: file path (.al/.dal).",
+            "type": "string",
+            "default": null
+          },
+          "folderPath": {
+            "description": "Diagnostics scope: folder path (recursive).",
+            "type": "string",
+            "default": null
+          },
+          "projectPath": {
+            "description": "Diagnostics scope: AL project folder path.",
+            "type": "string",
+            "default": null
+          },
+          "severities": {
+            "description": "Filter by diagnostic severity. Default: all.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": null
+          },
+          "areas": {
+            "description": "Filter by diagnostic source (matches diagnostic.source). Default: all.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": null
+          },
+          "limit": {
+            "description": "Max diagnostics returned. Default: 200, max: 500.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_symbolsearch",
+      "description": "Searches AL symbols (tables, codeunits, pages, fields, methods, etc.) across project and dependencies. Parameters: query (required) - text to match in names/docs, '*' matches all. filters.kinds=['Table','Codeunit','Page','Report','Enum','Interface'] for object types. filters.memberKinds=['Field','Method','Key','Action','Trigger'] for member types. filters.objectName to search within specific object (e.g., 'Customer'). filters.namespace restricts to namespace. filters.access=['Public','Internal']. filters.obsoleteState=['No','Pending','Removed']. filters.match='name'|'doc'|'all'. filters.scope='project'|'dependencies'|'all'. filters.limit (max 200). Returns: Array of symbols with name, kind, container, signature, docSummary, path. Search patterns: (1) Find objects by name: query='Customer', kinds=['Table'] \u2014 returns matching tables. (2) List all members of an object: query='*', objectName='Customer', memberKinds=['Field'] \u2014 lists ALL fields in Customer table. (3) Search within an object: query='Balance', objectName='Customer', memberKinds=['Field'] \u2014 finds fields containing 'Balance' in Customer table. Note: objectName filters members inside a named object; use query with kinds to find the object itself. Use cases: Discover APIs, find fields, explore dependencies without source.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "description": "Required text to search in symbol names and documentation. Use '*' to list all symbols matching filters without name filtering. Examples: query='Customer' kinds=['Table'] finds Customer table; query='*' objectName='Customer' memberKinds=['Method'] lists ALL methods in Customer; query='Process' objectName='Customer' memberKinds=['Method'] finds methods containing 'Process' in Customer.",
+                "type": "string"
+              },
+              "filters": {
+                "description": "Optional filters that narrow results by kind, scope, container, etc. Use objectName to find members of a specific object (e.g., fields of the 'Customer' table).",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "kinds": {
+                    "description": "Object kinds to include (Table, Codeunit, Page, etc.).",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "namespace": {
+                    "description": "Restrict results to a namespace.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "objectName": {
+                    "description": "Exact container object name for filtering members only (e.g., 'Customer' with memberKinds=['Method'] finds methods inside Customer table/codeunit). Do NOT use objectName to find the object itself\u2014use query with kinds filter instead (e.g., query='Customer' kinds=['Table']). Must be combined with memberKinds or used when searching for any member type.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "memberKinds": {
+                    "description": "Member kinds to include (Field, Key, Action, etc.).",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "access": {
+                    "description": "Access modifiers to include.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "obsoleteState": {
+                    "description": "Obsolete state filter.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "match": {
+                    "description": "Match mode: name | doc | all.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "scope": {
+                    "description": "Scope: project | dependencies | all.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "limit": {
+                    "description": "Max results (<=200).",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_writetranslation",
+      "description": "Creates or updates an XLIFF translation entry. Use search_translations first to get the trans_unit_id and source text. For translating dependency objects (e.g. Base Application), set appName to the dependency's app name. The XLIFF file is managed in the project's Translations/ directory.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "transUnitId": {
+                "description": "Trans-unit ID from search_translations (e.g., 'Table 550614099 - Field 3945078488 - Property 2879900210').",
+                "type": "string"
+              },
+              "targetLanguage": {
+                "description": "Target language (e.g., 'da-DK').",
+                "type": "string"
+              },
+              "targetText": {
+                "description": "The translated text.",
+                "type": "string"
+              },
+              "appName": {
+                "description": "App name of the dependency being translated (e.g., 'Base Application'). Omit for own project.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sourceText": {
+                "description": "English source text for the trans-unit. Required when creating new entries not found in the index.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "namedId": {
+                "description": "Human-readable named ID (e.g., 'Table Customer - Field Name - Property Caption'). Optional, included as a note.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_inspectpage",
+      "description": "Inspects a Business Central page layout or action hierarchy. Returns the control tree (areas, groups, fields, parts) or action tree (action areas, action groups, actions) depending on the content parameter. Use content='controls' (default) for layout modifications and content='actions' for action modifications. Note on promoted actions: the action tree includes an area(Promoted) section where actionref entries reference actions defined in other areas (Processing, Navigation, etc.). Promoted actions appear on the page's action bar for quick access. Use actionref(RefName; TargetAction) inside area(Promoted) to promote an action. The Promoted, PromotedCategory, and PromotedIsBig properties are legacy syntax and must not be used; always use the actionref syntax instead.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "pageName": {
+                "description": "Name of the page to inspect (e.g. 'Customer Card').",
+                "type": "string"
+              },
+              "content": {
+                "description": "What to inspect: 'controls' for layout tree or 'actions' for action tree. Default: controls.",
+                "type": "string",
+                "enum": [
+                  "Controls",
+                  "Actions"
+                ]
+              }
+            },
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_addproject",
+      "description": "Adds an AL project to the MCP server's active workspace. This allows projects to be added dynamically after the server has started, without needing to restart it. Parameters: projectPath (required) \u2014 path to the AL project folder containing app.json. Returns: success status and any diagnostics produced while loading the project. Next steps: After adding a project, use al_compile or al_build to compile it.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectPath": {
+            "description": "Path to the AL project folder containing app.json.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectPath"
+        ]
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_symbolrelations",
+      "description": "Gets related symbols for a given AL symbol. Finds both outgoing relations (SourceTable, TableRelation, Implements, Extends, ExtensionOf) and incoming relations (ExtendedBy, ImplementedBy, UsedAsSourceTable). Use symbolId from al_symbolsearch, or provide symbolName with symbolKind. Examples: Get relations for Customer table: symbolName='Customer' symbolKind='Table'. Filter to outgoing only: filters.direction='outgoing'. Filter by type: filters.relationTypes=['SourceTable','ExtendedBy'].",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "projectId": {
+                "description": "Project ID to search within. If not specified, all projects in the workspace are searched.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "symbolId": {
+                "description": "Symbol ID from a previous al_symbolsearch result. Takes precedence over symbolName.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "symbolName": {
+                "description": "Symbol name to look up (e.g., 'Customer'). Use with symbolKind for precise matching.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "symbolKind": {
+                "description": "Symbol kind when looking up by name (Table, Page, Codeunit, Interface, Enum, etc.).",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "filters": {
+                "description": "Optional filters for relation types, direction, scope, and result limit.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "relationTypes": {
+                    "description": "Relation types to include (SourceTable, TableRelation, Implements, Extends, ExtensionOf, ExtendedBy, ImplementedBy, etc.). If not specified, all types are included.",
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "direction": {
+                    "description": "Direction: outgoing | incoming | both. Default is both.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "scope": {
+                    "description": "Scope: project | dependencies | all. Default is all.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "limit": {
+                    "description": "Max results (<=200).",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            },
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_build",
+      "description": "Builds AL projects, generates .app packages, and returns diagnostics. Supports multi-project workspace builds. When to use: Use al_build for full project builds with .app generation. For quick validation without .app generation, use al_compile instead.Parameters: scope='current' (default) builds one project, scope='all' builds entire workspace with dependencies. projectPath specifies which project folder to build (absolute path to folder containing app.json). outputPath optionally specifies where to write the .app file (defaults to project output folder). onlyErrors=true (default: false) filters output to errors only (recommended for large projects). maxDiagnostics limits number of diagnostics returned (default 100). enableCodeAnalysis=true enables code analyzers (CodeCop, AppSourceCop, etc.) during the build. When not specified, uses the server's startup configuration. codeAnalyzers specifies which analyzers to run (e.g. ['${CodeCop}','${AppSourceCop}','${PerTenantExtensionCop}','${UICop}']). When not specified, uses the server's startup configuration. Returns: Build result with diagnostics (errors, warnings). On success, .app file is created in project output folder or specified outputPath. Prerequisites: Run al_downloadsymbols first if build fails with 'symbol not found' errors. Next steps: Use al_getdiagnostics to inspect errors, or al_publish to deploy.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "description": "Build scope - 'current' for active project only, 'all' for workspace with full dependency tree.",
+            "type": "string",
+            "default": "current"
+          },
+          "projectPath": {
+            "description": "Optional AL project folder path to build. If not specified, builds the default project.",
+            "type": "string",
+            "default": null
+          },
+          "outputPath": {
+            "description": "Optional output path for the generated .app file. If not specified, uses the project's default output folder.",
+            "type": "string",
+            "default": null
+          },
+          "onlyErrors": {
+            "description": "Set to true to return only error diagnostics (filters out warnings, info, hints).",
+            "type": "boolean",
+            "default": false
+          },
+          "maxDiagnostics": {
+            "description": "Maximum number of diagnostics to return. Default: 100.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "enableCodeAnalysis": {
+            "description": "Set to true to enable code analysis with analyzers (CodeCop, AppSourceCop, etc.). When not specified, uses the server's startup configuration.",
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "codeAnalyzers": {
+            "description": "Code analyzers to use. Well-known values: '${CodeCop}', '${AppSourceCop}', '${PerTenantExtensionCop}', '${UICop}'. When not specified, uses the server's startup configuration.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_downloadsymbols",
+      "description": "Downloads dependent symbols (.app files) required for AL compilation. Parameters: projectPath (AL project folder with app.json). For cloud: environmentName (e.g., 'sandbox'), tenant, authentication='AAD'. For on-premise: serverUrl, serverInstance, port, authentication='Windows'|'UserPassword'. For non-interactive scenarios (CI/CD, Docker containers), set BC_SERVER_USERNAME and BC_SERVER_PASSWORD environment variables for UserPassword auth. For non-interactive AAD/Entra ID authentication, set BC_ACCESS_TOKEN environment variable with a pre-acquired Bearer token. Server connection can also be configured via BC_SERVER_URL, BC_SERVER_INSTANCE, BC_SERVER_PORT env vars. Common: globalSourcesOnly=true (default: false) skips server connection (AppSource/Microsoft symbols only, no authentication required), force=true (default: false) re-downloads cached symbols, noCache=true (default: false) bypasses token cache, useInteractiveLogin=true (default) opens browser for auth automatically, enforceMinorVersion=true (default: false) constrains downloads to the minor version in app.json (e.g., 26.0 only gets 26.0.x.x hotfixes, not 26.5.x). Returns: Download result with count of symbols downloaded. System symbols included if platform/application in app.json. Downloads are saved to the .alpackages folder. Authentication: useInteractiveLogin=true (default) handles auth automatically via browser \u2014 no need to call al_auth_login first. globalSourcesOnly=true requires no authentication. For on-premise Windows auth, no login is needed. For on-premise UserPassword, credentials are resolved from saved credentials or BC_SERVER_USERNAME/BC_SERVER_PASSWORD environment variables. Next steps: Run al_build or al_compile after downloading symbols.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectPath": {
+            "description": "Optional AL project folder path. Used to locate app.json and launch.json.",
+            "type": "string",
+            "default": null
+          },
+          "serverUrl": {
+            "description": "Server URL for on-premise deployment (e.g., 'http://localhost').",
+            "type": "string",
+            "default": null
+          },
+          "serverInstance": {
+            "description": "Server instance name for on-premise deployment (e.g., 'BC').",
+            "type": "string",
+            "default": null
+          },
+          "port": {
+            "description": "Port number for on-premise development service.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "environmentName": {
+            "description": "Environment name for cloud deployment (e.g., 'sandbox', 'production').",
+            "type": "string",
+            "default": null
+          },
+          "environmentType": {
+            "description": "Environment type: 'OnPrem', 'Sandbox', or 'Production'.",
+            "type": "string",
+            "default": null
+          },
+          "authentication": {
+            "description": "Authentication method: 'AAD' (default for cloud, uses Entra ID/browser login), 'Windows' (on-premise integrated auth, no credentials needed), or 'UserPassword' (on-premise/Docker container, uses saved credentials or BC_SERVER_USERNAME/BC_SERVER_PASSWORD environment variables). Auto-detected as 'UserPassword' when BC_SERVER_USERNAME and BC_SERVER_PASSWORD env vars are set with on-premise server indicators.",
+            "type": "string",
+            "default": null
+          },
+          "tenant": {
+            "description": "Tenant ID for multi-tenant environments.",
+            "type": "string",
+            "default": null
+          },
+          "noCache": {
+            "description": "Set to true to force re-authentication (bypass cached tokens).",
+            "type": "boolean",
+            "default": false
+          },
+          "force": {
+            "description": "Set to true to force re-download all symbols even if they exist in cache.",
+            "type": "boolean",
+            "default": false
+          },
+          "globalSourcesOnly": {
+            "description": "Set to true to download symbols from global sources only (AppSource, Microsoft). No server connection required.",
+            "type": "boolean",
+            "default": false
+          },
+          "useInteractiveLogin": {
+            "description": "If true, uses interactive browser login when AAD authentication is required (VS Code-like). No tokens or device codes are returned.",
+            "type": "boolean",
+            "default": true
+          },
+          "enforceMinorVersion": {
+            "description": "Set to true to download the highest available hotfix version matching the major and minor from app.json. Default (false) downloads the latest available version within the same major version regardless of minor.",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_searchtranslations",
+      "description": "Searches translatable text (captions, tooltips, labels, error messages) across all loaded dependency packages. Searches XLIFF translation files inside .app packages. Use this to find trans-unit IDs for write_translation, discover Labels/TextConsts (not available via symbol search), or resolve localized terms to English identifiers. Required: query (string or '*'). Optional: objectName, kinds (Label/TextConst/Property), locale (e.g. 'da-DK'), limit (max 200).",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "description": "Required text to search in source/translated text. Use '*' to list all entries matching filters.",
+                "type": "string"
+              },
+              "objectName": {
+                "description": "Optional object name to restrict results to a specific object (e.g., 'Customer Card').",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "kinds": {
+                "description": "Optional kinds filter: 'Label', 'TextConst', 'Property'. Restricts by member kind.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "locale": {
+                "description": "Optional locale code (e.g., 'da-DK') to include translated text in results and search translated text.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "limit": {
+                "description": "Max results (default 50, max 200).",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_getpackagedependencies",
+      "description": "Gets the package dependencies defined in an AL project's app.json. Parameters: projectPath specifies the AL project folder (absolute path containing app.json). name optionally filters to a specific dependency by app name. Returns: List of dependencies with name, publisher, appId, and version range. Includes Base Application, System Application, and referenced extensions. Use cases: Understand project dependencies, verify versions, troubleshoot missing symbols. Next steps: Run al_downloadsymbols to download listed dependencies.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Optional module/app name to get dependencies for. If not specified, uses the default project.",
+            "type": "string",
+            "default": null
+          },
+          "projectPath": {
+            "description": "Optional AL project folder path to get dependencies from.",
+            "type": "string",
+            "default": null
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_publish",
+      "description": "Publishes AL packages with flexible options. Supports building and publishing current project (default), publishing without building (skipBuild=true), or full dependency chain publishing (buildDependencies=true). Parameters: appPath (direct .app file) or projectPath (folder with app.json, uses built .app). For cloud: environmentName (e.g., 'sandbox'), environmentType='Sandbox'|'Production', tenant. For on-premise: serverUrl, serverInstance, port, authentication='Windows'|'UserPassword'. For non-interactive scenarios (CI/CD, Docker containers), set BC_SERVER_USERNAME and BC_SERVER_PASSWORD environment variables for UserPassword auth. For non-interactive AAD/Entra ID authentication, set BC_ACCESS_TOKEN environment variable with a pre-acquired Bearer token. Server connection can also be configured via BC_SERVER_URL, BC_SERVER_INSTANCE, BC_SERVER_PORT env vars. Deployment options: schemaUpdateMode='Synchronize' (default)|'ForceSync'|'Recreate', forceUpgrade=true (default: false) bypasses version check. skipBuild=true publishes existing .app without building (like VS Code 'Publish extension without building'). buildDependencies=true builds and publishes the full dependency tree (like VS Code 'Publish full dependency tree'). Note: RAD/incremental (delta) publishing is only available in VS Code because it requires real-time change tracking. This tool always performs a full build. Auth: useInteractiveLogin=true (default) opens browser automatically \u2014 no need to call al_auth_login first, noCache=true (default: false) forces re-auth. Returns: Publish result with success/failure and server messages. No local files are modified. Prerequisites: Build project first with al_build (unless skipBuild=false which is default). Authentication: useInteractiveLogin=true (default) handles auth automatically via browser. Manual al_auth_login is only needed when caching tokens for multiple operations or troubleshooting auth issues. On-premise Windows auth requires no login. Next steps: Test extension in Business Central. Use al_auth_logout to switch accounts.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "appPath": {
+            "description": "Optional path to the .app file to publish. If not specified, uses the built package from the project's output folder.",
+            "type": "string",
+            "default": null
+          },
+          "projectPath": {
+            "description": "Optional AL project folder path. Used to locate the .app file if appPath is not specified.",
+            "type": "string",
+            "default": null
+          },
+          "serverUrl": {
+            "description": "Server URL for on-premise deployment (e.g., 'http://localhost').",
+            "type": "string",
+            "default": null
+          },
+          "serverInstance": {
+            "description": "Server instance name for on-premise deployment (e.g., 'BC').",
+            "type": "string",
+            "default": null
+          },
+          "port": {
+            "description": "Port number for on-premise development service.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "environmentName": {
+            "description": "Environment name for cloud deployment (e.g., 'sandbox', 'production').",
+            "type": "string",
+            "default": null
+          },
+          "environmentType": {
+            "description": "Environment type: 'OnPrem', 'Sandbox', or 'Production'.",
+            "type": "string",
+            "default": null
+          },
+          "authentication": {
+            "description": "Authentication method: 'AAD' (default for cloud, uses Entra ID/browser login), 'Windows' (on-premise integrated auth, no credentials needed), or 'UserPassword' (on-premise/Docker container, uses saved credentials or BC_SERVER_USERNAME/BC_SERVER_PASSWORD environment variables). Auto-detected as 'UserPassword' when BC_SERVER_USERNAME and BC_SERVER_PASSWORD env vars are set with on-premise server indicators.",
+            "type": "string",
+            "default": null
+          },
+          "tenant": {
+            "description": "Tenant ID for multi-tenant environments.",
+            "type": "string",
+            "default": null
+          },
+          "schemaUpdateMode": {
+            "description": "Schema update mode: 'Synchronize' (default), 'ForceSync', or 'Recreate'.",
+            "type": "string",
+            "default": null
+          },
+          "noCache": {
+            "description": "Set to true to force re-authentication (bypass cached tokens).",
+            "type": "boolean",
+            "default": false
+          },
+          "forceUpgrade": {
+            "description": "Set to true to force upgrade without requiring version change.",
+            "type": "boolean",
+            "default": false
+          },
+          "useInteractiveLogin": {
+            "description": "If true, uses interactive browser login when AAD authentication is required (VS Code-like). No tokens or device codes are returned.",
+            "type": "boolean",
+            "default": true
+          },
+          "skipBuild": {
+            "description": "Skip the build step and publish the existing .app package from the project's output folder. Use when the project has already been built with al_build.",
+            "type": "boolean",
+            "default": false
+          },
+          "buildDependencies": {
+            "description": "Include full dependency chain in publish. Set to true to build and publish all transitive dependencies.",
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    },
+    {
+      "name": "al_run_tests",
+      "description": "Runs AL unit tests in Business Central. Connects to a BC server and executes tests in the specified codeunit, returning pass/fail results. Parameters: codeunitId (required, integer codeunit ID), testMethods (optional, array of method names), company (optional, startup company name). For cloud: environmentName (e.g., 'sandbox'), environmentType='Sandbox'|'Production', tenant. For on-premise: serverUrl, serverInstance, port, authentication='Windows'|'UserPassword'. For non-interactive scenarios (CI/CD, Docker containers), set BC_SERVER_USERNAME and BC_SERVER_PASSWORD environment variables for UserPassword auth. For non-interactive AAD/Entra ID authentication, set BC_ACCESS_TOKEN environment variable with a pre-acquired Bearer token. Server connection can also be configured via BC_SERVER_URL, BC_SERVER_INSTANCE, BC_SERVER_PORT env vars. Auth: useInteractiveLogin=true (default) opens browser automatically. Returns: Summary of test results with pass/fail counts and details for failing tests.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "codeunitId": {
+            "description": "The test codeunit ID to run (e.g., 50100).",
+            "type": "integer"
+          },
+          "testMethods": {
+            "description": "Optional list of test method names to run within the codeunit (e.g., ['TestMethod1','TestMethod2']). Runs all methods if not specified.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": null
+          },
+          "projectPath": {
+            "description": "Optional project folder path. Used to read connection settings from launch.json.",
+            "type": "string",
+            "default": null
+          },
+          "company": {
+            "description": "The company name to use when running tests (e.g., 'CRONUS International Ltd.'). Uses default if not specified.",
+            "type": "string",
+            "default": null
+          },
+          "serverUrl": {
+            "description": "Server URL for on-premise deployment (e.g., 'http://localhost').",
+            "type": "string",
+            "default": null
+          },
+          "serverInstance": {
+            "description": "Server instance name for on-premise deployment (e.g., 'BC').",
+            "type": "string",
+            "default": null
+          },
+          "port": {
+            "description": "Port number for on-premise development service.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "environmentName": {
+            "description": "Environment name for cloud deployment (e.g., 'sandbox', 'production').",
+            "type": "string",
+            "default": null
+          },
+          "environmentType": {
+            "description": "Environment type: 'OnPrem', 'Sandbox', or 'Production'.",
+            "type": "string",
+            "default": null
+          },
+          "authentication": {
+            "description": "Authentication method: 'AAD' (default for cloud, uses Entra ID/browser login), 'Windows' (on-premise integrated auth, no credentials needed), or 'UserPassword' (on-premise/Docker container, uses saved credentials or BC_SERVER_USERNAME/BC_SERVER_PASSWORD environment variables). Auto-detected as 'UserPassword' when BC_SERVER_USERNAME and BC_SERVER_PASSWORD env vars are set with on-premise server indicators.",
+            "type": "string",
+            "default": null
+          },
+          "tenant": {
+            "description": "Tenant ID for multi-tenant environments.",
+            "type": "string",
+            "default": null
+          },
+          "noCache": {
+            "description": "Set to true to force re-authentication (bypass cached tokens).",
+            "type": "boolean",
+            "default": false
+          },
+          "useInteractiveLogin": {
+            "description": "If true, uses interactive browser login when AAD authentication is required.",
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "required": [
+          "codeunitId"
+        ]
+      },
+      "execution": {
+        "taskSupport": "optional"
+      }
+    }
+  ]
+}
