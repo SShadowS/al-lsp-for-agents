@@ -3,6 +3,8 @@ package wrapper
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -1575,6 +1577,70 @@ func (h *DidChangeWorkspaceFoldersHandler) Handle(msg *Message, w WrapperInterfa
 
 	// Notification — no response to client
 	return nil, nil
+}
+
+// reshapeToolResult turns an MCP ToolCallResult into an LSP result body.
+// If the joined text content parses as JSON, that JSON is returned verbatim;
+// otherwise the text is wrapped as {"text": "..."}. The second return value
+// is the tool's isError flag.
+func reshapeToolResult(res *ToolCallResult) (json.RawMessage, bool) {
+	var sb strings.Builder
+	for _, c := range res.Content {
+		sb.WriteString(c.Text)
+	}
+	text := sb.String()
+	trimmed := strings.TrimSpace(text)
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') && json.Valid([]byte(trimmed)) {
+		return json.RawMessage(trimmed), res.IsError
+	}
+	wrapped, _ := json.Marshal(map[string]string{"text": text})
+	return wrapped, res.IsError
+}
+
+// SymbolRelationsHandler handles al/symbolRelations via the almcp backend.
+type SymbolRelationsHandler struct{}
+
+func (h *SymbolRelationsHandler) ShouldHandle(method string) bool {
+	return method == "al/symbolRelations"
+}
+
+func (h *SymbolRelationsHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	srv := w.GetALMcpServer()
+	if srv == nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, "almcp server not available")
+	}
+	projectDir, pkgCache := mcpProjectContext(w)
+	if err := srv.EnsureRunning(projectDir, pkgCache); err != nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, "almcp unavailable: "+err.Error())
+	}
+
+	var params interface{}
+	json.Unmarshal(msg.Params, &params)
+	res, err := srv.CallTool("al_symbolrelations", map[string]interface{}{"parameters": params})
+	if err != nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+	}
+	body, isErr := reshapeToolResult(res)
+	if isErr {
+		w.Log("al/symbolRelations returned isError: %s", string(body))
+	}
+	return &Message{JSONRPC: "2.0", ID: msg.ID, Result: body}, nil
+}
+
+// mcpProjectContext derives the project dir + package cache for almcp from the
+// wrapper's current workspace folders. Falls back to cwd when none is known.
+func mcpProjectContext(w WrapperInterface) (projectDir, pkgCache string) {
+	folders := w.WorkspaceFolders()
+	if len(folders) > 0 {
+		if p, err := FileURIToPath(folders[0].URI); err == nil {
+			projectDir = p
+		}
+	}
+	if projectDir == "" {
+		projectDir, _ = os.Getwd()
+	}
+	pkgCache = filepath.Join(projectDir, ".alpackages")
+	return projectDir, pkgCache
 }
 
 func GetDefaultHandlers() []Handler {
