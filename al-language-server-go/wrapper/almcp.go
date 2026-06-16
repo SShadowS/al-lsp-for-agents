@@ -58,15 +58,15 @@ func discoverMcpBackend(extensionPath string) (mcpBackend, bool) {
 
 // ALMcpServer owns one almcp child process and an MCP client to it.
 type ALMcpServer struct {
-	mu         sync.Mutex
-	cmd        *exec.Cmd
-	stdin      io.WriteCloser
-	stderr     io.ReadCloser
-	client     *MCPClient
-	tools      map[string]bool
-	projectDir string
-	backend    mcpBackend
-	logFunc    func(format string, args ...interface{})
+	mu       sync.Mutex
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	stderr   io.ReadCloser
+	client   *MCPClient
+	tools    map[string]bool
+	projects map[string]bool // set of project dirs registered with the running server
+	backend  mcpBackend
+	logFunc  func(format string, args ...interface{})
 
 	// exited is set by the background reaper when the current child's
 	// cmd.Wait() returns. It is guarded by mu so liveness can be checked
@@ -76,7 +76,7 @@ type ALMcpServer struct {
 }
 
 func NewALMcpServer(logFunc func(format string, args ...interface{})) *ALMcpServer {
-	return &ALMcpServer{tools: map[string]bool{}, logFunc: logFunc}
+	return &ALMcpServer{tools: map[string]bool{}, projects: map[string]bool{}, logFunc: logFunc}
 }
 
 func (s *ALMcpServer) log(format string, args ...interface{}) {
@@ -165,7 +165,7 @@ func (s *ALMcpServer) EnsureRunning(projectDir, pkgCache string) error {
 	for _, n := range names {
 		s.tools[n] = true
 	}
-	s.projectDir = projectDir
+	s.projects = map[string]bool{projectDir: true}
 	s.log("ready, tools=%v", names)
 	return nil
 }
@@ -193,6 +193,27 @@ func (s *ALMcpServer) AddProject(projectDir string) {
 	if s.HasTool("al_addproject") {
 		_, _ = s.CallTool("al_addproject", map[string]interface{}{"projectPath": projectDir})
 	}
+}
+
+// EnsureProject ensures the server is running and that projectDir is registered.
+// If the server is not yet running it spawns one (with projectDir as the first
+// project). If the server is already running but does not know projectDir yet,
+// it calls AddProject (which calls CallTool) OUTSIDE the lock to avoid deadlock.
+func (s *ALMcpServer) EnsureProject(projectDir, pkgCache string) error {
+	if err := s.EnsureRunning(projectDir, pkgCache); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	known := s.projects[projectDir]
+	s.mu.Unlock()
+	if known {
+		return nil
+	}
+	s.AddProject(projectDir) // calls CallTool — must be outside the lock
+	s.mu.Lock()
+	s.projects[projectDir] = true
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *ALMcpServer) stopLocked() {

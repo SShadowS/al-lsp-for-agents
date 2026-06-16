@@ -89,6 +89,52 @@ func TestALMcpServerLifecycle(t *testing.T) {
 	s.Shutdown()
 }
 
+func TestALMcpServerEnsureProjectAddsSecond(t *testing.T) {
+	fake := buildFakeAlmcp(t)
+
+	s := NewALMcpServer(func(string, ...interface{}) {})
+	s.backend = mcpBackend{kind: "bundled", command: fake}
+
+	projA := "C:/projA"
+	projB := "C:/projB"
+
+	// First call: spawns server with projA.
+	if err := s.EnsureProject(projA, projA+"/.alpackages"); err != nil {
+		t.Fatalf("EnsureProject(A): %v", err)
+	}
+	firstCmd := s.cmd
+
+	// Second call with same project: no respawn, no AddProject needed.
+	if err := s.EnsureProject(projA, projA+"/.alpackages"); err != nil {
+		t.Fatalf("EnsureProject(A) again: %v", err)
+	}
+	if s.cmd != firstCmd {
+		t.Fatalf("expected same process after second EnsureProject(A)")
+	}
+
+	// Third call with new project: still same process, AddProject called.
+	if err := s.EnsureProject(projB, projB+"/.alpackages"); err != nil {
+		t.Fatalf("EnsureProject(B): %v", err)
+	}
+	if s.cmd != firstCmd {
+		t.Fatalf("expected same process after EnsureProject(B) — should not respawn")
+	}
+
+	// Both projects must be in the set.
+	s.mu.Lock()
+	hasA := s.projects[projA]
+	hasB := s.projects[projB]
+	s.mu.Unlock()
+	if !hasA {
+		t.Fatalf("projA not in projects set")
+	}
+	if !hasB {
+		t.Fatalf("projB not in projects set after EnsureProject(B)")
+	}
+
+	s.Shutdown()
+}
+
 func TestALMcpServerRespawnAfterCrash(t *testing.T) {
 	fake := buildFakeAlmcp(t)
 

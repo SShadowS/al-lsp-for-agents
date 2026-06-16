@@ -34,7 +34,7 @@ func main() {
 		case "initialize":
 			resp = `{"jsonrpc":"2.0","id":` + id + `,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"fake","version":"0"}}}`
 		case "tools/list":
-			resp = `{"jsonrpc":"2.0","id":` + id + `,"result":{"tools":[{"name":"al_symbolrelations"}]}}`
+			resp = `{"jsonrpc":"2.0","id":` + id + `,"result":{"tools":[{"name":"al_symbolrelations"},{"name":"al_addproject"}]}}`
 		case "tools/call":
 			resp = `{"jsonrpc":"2.0","id":` + id + `,"result":{"content":[{"type":"text","text":"{\"relations\":[]}"}],"isError":false}}`
 		default:

@@ -1610,7 +1610,7 @@ func (h *SymbolRelationsHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 		return nil, NewErrorResponse(msg.ID, InternalError, "almcp server not available")
 	}
 	projectDir, pkgCache := mcpProjectContext(w)
-	if err := srv.EnsureRunning(projectDir, pkgCache); err != nil {
+	if err := srv.EnsureProject(projectDir, pkgCache); err != nil {
 		return nil, NewErrorResponse(msg.ID, InternalError, "almcp unavailable: "+err.Error())
 	}
 
@@ -1640,7 +1640,7 @@ func (h *InspectPageHandler) Handle(msg *Message, w WrapperInterface) (*Message,
 		return nil, NewErrorResponse(msg.ID, InternalError, "almcp server not available")
 	}
 	projectDir, pkgCache := mcpProjectContext(w)
-	if err := srv.EnsureRunning(projectDir, pkgCache); err != nil {
+	if err := srv.EnsureProject(projectDir, pkgCache); err != nil {
 		return nil, NewErrorResponse(msg.ID, InternalError, "almcp unavailable: "+err.Error())
 	}
 	// Capability gate: bundled almcp lacks al_inspectpage. Surface a clear,
@@ -1666,6 +1666,8 @@ func (h *InspectPageHandler) Handle(msg *Message, w WrapperInterface) (*Message,
 
 // mcpProjectContext derives the project dir + package cache for almcp from the
 // wrapper's current workspace folders. Falls back to cwd when none is known.
+// pkgCache is one or more paths joined by os.PathListSeparator; almcp splits on
+// it when parsing --packagecachepath.
 func mcpProjectContext(w WrapperInterface) (projectDir, pkgCache string) {
 	folders := w.WorkspaceFolders()
 	if len(folders) > 0 {
@@ -1675,8 +1677,14 @@ func mcpProjectContext(w WrapperInterface) (projectDir, pkgCache string) {
 	}
 	if projectDir == "" {
 		projectDir, _ = os.Getwd()
+		w.Log("mcpProjectContext: no workspace folder; falling back to cwd %s", projectDir)
 	}
-	pkgCache = filepath.Join(projectDir, ".alpackages")
+	paths := DiscoverPackageCachePaths(projectDir)
+	if len(paths) == 0 {
+		pkgCache = filepath.Join(projectDir, ".alpackages")
+	} else {
+		pkgCache = strings.Join(paths, string(os.PathListSeparator))
+	}
 	return projectDir, pkgCache
 }
 

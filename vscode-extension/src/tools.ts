@@ -765,13 +765,21 @@ class SymbolRelationsTool
     options: vscode.LanguageModelToolInvocationOptions<SymbolRelationsInput>,
     _token: vscode.CancellationToken
   ): Promise<vscode.LanguageModelToolResult> {
-    const result = await this.client.sendRequest<unknown>(
-      "al/symbolRelations",
-      options.input
-    );
-    return new vscode.LanguageModelToolResult([
-      new vscode.LanguageModelTextPart(JSON.stringify(result, null, 2)),
-    ]);
+    try {
+      const result = await this.client.sendRequest<unknown>(
+        "al/symbolRelations",
+        options.input
+      );
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(JSON.stringify(result, null, 2)),
+      ]);
+    } catch (e) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Relations lookup failed: ${e instanceof Error ? e.message : String(e)}`
+        ),
+      ]);
+    }
   }
 }
 
