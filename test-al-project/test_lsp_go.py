@@ -389,6 +389,63 @@ class LSPTester:
 
         return self.add_result("CodeLens", False, "Unexpected result format", response)
 
+    def test_symbol_relations(self) -> TestResult:
+        """Test al/symbolRelations (almcp-backed, with EditorServices fallback)."""
+        _, response = self.request("al/symbolRelations", {
+            "symbolName": "Customer",
+            "symbolKind": "Table"
+        })
+
+        if not response:
+            return self.add_result("SymbolRelations", False, "No response (timeout)")
+
+        if "error" in response:
+            error_code = response["error"].get("code", 0)
+            return self.add_result("SymbolRelations", False,
+                f"Error (code: {error_code}): {response['error'].get('message', 'unknown')}", response)
+
+        result = response.get("result")
+        # Expected shape: {"relations": [...], "truncated": bool}. The inner AL LS
+        # native al/symbolRelations (the fallback) always returns this; the relations
+        # array may be empty when the test project has no downloaded symbols.
+        if isinstance(result, dict) and "relations" in result:
+            rels = result.get("relations") or []
+            return self.add_result("SymbolRelations", True,
+                f"Responded with relations payload ({len(rels)} relation(s))", response)
+        # A {"text": "..."} body means almcp errored AND the EditorServices fallback
+        # did not produce the expected shape — that is a real failure to respond.
+        return self.add_result("SymbolRelations", False,
+            f"Unexpected result shape (no 'relations'): {json.dumps(result)[:200]}", response)
+
+    def test_inspect_page(self) -> TestResult:
+        """Test al/inspectPage (almcp-backed; requires the nuget al tool)."""
+        _, response = self.request("al/inspectPage", {
+            "pageName": "Customer Card",
+            "content": "Controls"
+        })
+
+        if not response:
+            return self.add_result("InspectPage", False, "No response (timeout)")
+
+        if "error" in response:
+            error_code = response["error"].get("code", 0)
+            msg = response["error"].get("message", "")
+            # MethodNotFound carrying the install hint = the capability gate working
+            # correctly when only the bundled almcp (no al_inspectpage) is available.
+            # That is expected behavior in such an environment, not a failure.
+            if error_code == -32601 and "AL build tools" in msg:
+                return self.add_result("InspectPage", True,
+                    "Capability gate returned actionable install hint (bundled almcp lacks al_inspectpage)", response)
+            return self.add_result("InspectPage", False,
+                f"Error (code: {error_code}): {msg}", response)
+
+        result = response.get("result")
+        if isinstance(result, dict) and (result.get("sourceTable") or result.get("content") or result.get("pageId")):
+            return self.add_result("InspectPage", True,
+                f"Responded with page tree (pageId={result.get('pageId')}, sourceTable={result.get('sourceTable')})", response)
+        return self.add_result("InspectPage", False,
+            f"Unexpected result shape: {json.dumps(result)[:200]}", response)
+
     def run_all_tests(self):
         """Run all tests."""
         print(f"\n{'='*60}")
@@ -414,6 +471,8 @@ class LSPTester:
             self.test_references()
             self.test_call_hierarchy()
             self.test_code_lens()
+            self.test_symbol_relations()
+            self.test_inspect_page()
 
         finally:
             self.stop()
