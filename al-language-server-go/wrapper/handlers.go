@@ -3,6 +3,8 @@ package wrapper
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -167,6 +169,9 @@ type WrapperInterface interface {
 
 	// GetCallHierarchyServer returns the call hierarchy server (may be nil)
 	GetCallHierarchyServer() *CallHierarchyServer
+
+	// GetALMcpServer returns the almcp MCP server manager (never nil after New()).
+	GetALMcpServer() *ALMcpServer
 
 	// UpdateWorkspaceFolders adds/removes workspace folders from internal state
 	UpdateWorkspaceFolders(added []WorkspaceFolder, removed []WorkspaceFolder)
@@ -1574,6 +1579,136 @@ func (h *DidChangeWorkspaceFoldersHandler) Handle(msg *Message, w WrapperInterfa
 	return nil, nil
 }
 
+// reshapeToolResult turns an MCP ToolCallResult into an LSP result body.
+// If the joined text content parses as JSON, that JSON is returned verbatim;
+// otherwise the text is wrapped as {"text": "..."}. The second return value
+// is the tool's isError flag.
+func reshapeToolResult(res *ToolCallResult) (json.RawMessage, bool) {
+	var sb strings.Builder
+	for _, c := range res.Content {
+		sb.WriteString(c.Text)
+	}
+	text := sb.String()
+	trimmed := strings.TrimSpace(text)
+	if len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[') && json.Valid([]byte(trimmed)) {
+		return json.RawMessage(trimmed), res.IsError
+	}
+	wrapped, _ := json.Marshal(map[string]string{"text": text})
+	return wrapped, res.IsError
+}
+
+// SymbolRelationsHandler handles al/symbolRelations via the almcp backend.
+type SymbolRelationsHandler struct{}
+
+func (h *SymbolRelationsHandler) ShouldHandle(method string) bool {
+	return method == "al/symbolRelations"
+}
+
+func (h *SymbolRelationsHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	var params interface{}
+	json.Unmarshal(msg.Params, &params)
+
+	// Prefer almcp (richer dependency-scope contract) when it actually works.
+	if srv := w.GetALMcpServer(); srv != nil {
+		projectDir, pkgCache := mcpProjectContext(w)
+		if err := srv.EnsureProject(projectDir, pkgCache); err == nil {
+			res, callErr := srv.CallTool("al_symbolrelations", map[string]interface{}{"parameters": params})
+			if callErr == nil && !res.IsError {
+				body, _ := reshapeToolResult(res)
+				return &Message{JSONRPC: "2.0", ID: msg.ID, Result: body}, nil
+			}
+			// almcp's al_symbolrelations is currently broken by an upstream MS DI
+			// bug (SymbolRelationsService not registered). Fall back to the inner
+			// AL LS native al/symbolRelations, which is unaffected.
+			w.Log("al_symbolrelations via MCP unavailable (callErr=%v), falling back to EditorServices al/symbolRelations", callErr)
+		} else {
+			w.Log("almcp EnsureProject failed (%v), falling back to EditorServices al/symbolRelations", err)
+		}
+	}
+
+	// Fallback: native al/symbolRelations on the inner Microsoft AL LS.
+	resp, err := w.SendRequestToLSP("al/symbolRelations", params)
+	if err != nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, "al/symbolRelations failed: "+err.Error())
+	}
+	if resp.Error != nil {
+		return nil, &Message{JSONRPC: "2.0", ID: msg.ID, Error: resp.Error}
+	}
+	return &Message{JSONRPC: "2.0", ID: msg.ID, Result: resp.Result}, nil
+}
+
+// InspectPageHandler handles al/inspectPage via the almcp backend.
+type InspectPageHandler struct{}
+
+func (h *InspectPageHandler) ShouldHandle(method string) bool {
+	return method == "al/inspectPage"
+}
+
+func (h *InspectPageHandler) Handle(msg *Message, w WrapperInterface) (*Message, *Message) {
+	srv := w.GetALMcpServer()
+	if srv == nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, "almcp server not available")
+	}
+	projectDir, pkgCache := mcpProjectContext(w)
+	if err := srv.EnsureProject(projectDir, pkgCache); err != nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, "almcp unavailable: "+err.Error())
+	}
+	// Capability gate: bundled almcp lacks al_inspectpage. Surface a clear,
+	// actionable error instead of a confusing "Unknown tool" or empty result.
+	if !srv.HasTool("al_inspectpage") {
+		return nil, NewErrorResponse(msg.ID, MethodNotFound,
+			"al/inspectPage requires the AL build tools (nuget 'al' tool). Install with: "+
+				"dotnet tool install --global microsoft.dynamics.businesscentral.development.tools --prerelease")
+	}
+
+	var params interface{}
+	json.Unmarshal(msg.Params, &params)
+	res, err := srv.CallTool("al_inspectpage", map[string]interface{}{"parameters": params})
+	if err != nil {
+		return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+	}
+	body, isErr := reshapeToolResult(res)
+	if isErr {
+		w.Log("al/inspectPage returned isError: %s", string(body))
+	}
+	return &Message{JSONRPC: "2.0", ID: msg.ID, Result: body}, nil
+}
+
+// mcpProjectContext derives the project dir + package cache for almcp from the
+// wrapper's current workspace folders. Falls back to cwd when none is known.
+// pkgCache is one or more paths joined by os.PathListSeparator; almcp splits on
+// it when parsing --packagecachepath.
+func mcpProjectContext(w WrapperInterface) (projectDir, pkgCache string) {
+	folders := w.WorkspaceFolders()
+	if len(folders) > 0 {
+		if p, err := FileURIToPath(folders[0].URI); err == nil {
+			projectDir = p
+		}
+	}
+	if projectDir == "" {
+		projectDir, _ = os.Getwd()
+		w.Log("mcpProjectContext: no workspace folder; falling back to cwd %s", projectDir)
+	}
+	paths := DiscoverPackageCachePaths(projectDir)
+	if len(paths) == 0 {
+		pkgCache = filepath.Join(projectDir, ".alpackages")
+		return projectDir, pkgCache
+	}
+	// almcp may be spawned without cwd=projectDir, so relative cache entries
+	// (DiscoverPackageCachePaths returns "./.alpackages" first) would not
+	// resolve and dependency symbols would be missing. Make every entry
+	// absolute against projectDir before joining — never pass a relative path.
+	abs := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(projectDir, p)
+		}
+		abs = append(abs, p)
+	}
+	pkgCache = strings.Join(abs, string(os.PathListSeparator))
+	return projectDir, pkgCache
+}
+
 func GetDefaultHandlers() []Handler {
 	return []Handler{
 		&DefinitionHandler{},
@@ -1585,5 +1720,7 @@ func GetDefaultHandlers() []Handler {
 		&CodeLensHandler{},
 		&SetActiveWorkspaceHandler{},
 		&DidChangeWorkspaceFoldersHandler{},
+		&SymbolRelationsHandler{},
+		&InspectPageHandler{},
 	}
 }

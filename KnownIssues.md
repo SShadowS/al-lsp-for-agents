@@ -1,5 +1,36 @@
 # Known Issues
 
+## al_symbolrelations MCP Tool Crashes (upstream Microsoft DI bug)
+
+**Status:** Open upstream — wrapper works around it.
+**Affected:** `almcp` 18.0.37 and the AL extension-bundled `almcp`.
+
+### Problem
+
+Microsoft's `al_symbolrelations` MCP tool throws on every call:
+
+```
+InvalidOperationException: No service for type
+'...SymbolRelationsService' has been registered
+```
+
+The service backing the tool is never registered in the MCP server's
+dependency-injection container, so the tool is non-functional in both the
+nuget `al` dotnet tool (`almcp` 18.0.37) and the AL VS Code extension's
+bundled `almcp`.
+
+### Wrapper behavior
+
+`al/symbolRelations` (tool `bclsp_symbolRelations`) tries the MCP
+`al_symbolrelations` tool first, and on this failure automatically falls back
+to the inner AL Language Server's native `al/symbolRelations` method, which
+works. Once Microsoft fixes the MCP tool, the wrapper will prefer it again
+without any change.
+
+### Upstream report
+
+Drafted bug report in [docs/ms-almcp-symbolrelations-di-bug.md](docs/ms-almcp-symbolrelations-di-bug.md).
+
 ## workspaceSymbol Returned Empty Results (RESOLVED in Claude Code 2.1.x)
 
 **Status:** Resolved — fixed client-side in Claude Code 2.1.x.

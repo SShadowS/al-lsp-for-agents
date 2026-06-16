@@ -117,6 +117,22 @@ func GetALLSPExecutable(extensionPath string) string {
 	return filepath.Join(extensionPath, "bin", binDir, executable)
 }
 
+// GetALMcpExecutable returns the path to the extension-bundled almcp apphost.
+func GetALMcpExecutable(extensionPath string) string {
+	var binDir, executable string
+	switch runtime.GOOS {
+	case "windows":
+		binDir, executable = "win32", "almcp.exe"
+	case "linux":
+		binDir, executable = "linux", "almcp"
+	case "darwin":
+		binDir, executable = "darwin", "almcp"
+	default:
+		binDir, executable = "win32", "almcp.exe"
+	}
+	return filepath.Join(extensionPath, "bin", binDir, executable)
+}
+
 // stripWindowsNamespacePrefix removes the Windows extended-length path prefix
 // (\\?\ or \\?\UNC\) so the result is a normal Windows path that downstream
 // URL/URI code can handle. Returns the input unchanged if no prefix is present.

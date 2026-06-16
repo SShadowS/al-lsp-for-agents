@@ -11,6 +11,8 @@ For `.al` files, **use the LSP tool instead of Grep/Glob/Read** for anything abo
 - "What type is X? What fields does this table have?" -> `hover`, not Read
 - "What's in this file?" -> `documentSymbol`, not Read
 - "Find a symbol by name" -> `workspaceSymbol` with a `query`, not Grep (needs Claude Code 2.1.x+)
+- "What extends/implements X? What's X's source table?" -> `symbolRelations`
+- "What's on this page? page layout/actions?" -> `inspectPage`
 - "How many references? Code quality?" -> `codeLens`
 
 ## When Grep/Glob is fine

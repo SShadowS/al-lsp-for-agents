@@ -55,6 +55,8 @@ The `.lsp.json` must reference the correct wrapper binary for the platform:
   - Initializes workspaces and waits for project load
   - Supports hover, documentSymbol, references, workspaceSymbol
   - workspaceSymbol routes to al/symbolSearch with cold-index retry (the old Claude Code empty-query bug, anthropics/claude-code#17149, is fixed in 2.1.x)
+  - `al/symbolRelations` returns an object's related symbols (extends, implements, source table, extended-by); tries the MS `almcp` MCP tool first, falls back to the inner AL LS native method (upstream MCP DI bug)
+  - `al/inspectPage` returns a page's control or action tree (incl. dependency pages); requires the nuget `al` build tools
   - Proper semver sorting to find newest AL extension (e.g., 17.x > 9.x)
 
 ## Logging

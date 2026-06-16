@@ -74,6 +74,20 @@ export function registerTools(
     )
   );
 
+  context.subscriptions.push(
+    vscode.lm.registerTool(
+      "bclsp_symbolRelations",
+      new SymbolRelationsTool(client)
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.lm.registerTool(
+      "bclsp_inspectPage",
+      new InspectPageTool(client)
+    )
+  );
+
 }
 
 // --- Tool Implementations ---
@@ -729,5 +743,73 @@ interface DocumentSymbol {
   range: Range;
   selectionRange: Range;
   children?: DocumentSymbol[];
+}
+
+interface SymbolRelationsInput {
+  symbolName: string;
+  symbolKind?: string;
+  filters?: {
+    relationTypes?: string[];
+    direction?: string;
+    scope?: string;
+    limit?: number;
+  };
+}
+
+class SymbolRelationsTool
+  implements vscode.LanguageModelTool<SymbolRelationsInput>
+{
+  constructor(private client: LanguageClient) {}
+
+  async invoke(
+    options: vscode.LanguageModelToolInvocationOptions<SymbolRelationsInput>,
+    _token: vscode.CancellationToken
+  ): Promise<vscode.LanguageModelToolResult> {
+    try {
+      const result = await this.client.sendRequest<unknown>(
+        "al/symbolRelations",
+        options.input
+      );
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(JSON.stringify(result, null, 2)),
+      ]);
+    } catch (e) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Relations lookup failed: ${e instanceof Error ? e.message : String(e)}`
+        ),
+      ]);
+    }
+  }
+}
+
+interface InspectPageInput {
+  pageName: string;
+  content?: "Controls" | "Actions";
+}
+
+class InspectPageTool implements vscode.LanguageModelTool<InspectPageInput> {
+  constructor(private client: LanguageClient) {}
+
+  async invoke(
+    options: vscode.LanguageModelToolInvocationOptions<InspectPageInput>,
+    _token: vscode.CancellationToken
+  ): Promise<vscode.LanguageModelToolResult> {
+    try {
+      const result = await this.client.sendRequest<unknown>(
+        "al/inspectPage",
+        options.input
+      );
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(JSON.stringify(result, null, 2)),
+      ]);
+    } catch (e) {
+      return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(
+          `Inspect page failed: ${e instanceof Error ? e.message : String(e)}`
+        ),
+      ]);
+    }
+  }
 }
 

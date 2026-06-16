@@ -2,6 +2,14 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [Unreleased]
+
+### Added
+- **`bclsp_symbolRelations` tool** -- finds how an AL object relates to others. Returns outgoing relations (SourceTable, TableRelation, Implements, Extends, ExtensionOf) and incoming relations (ExtendedBy, ImplementedBy, UsedAsSourceTable) for a symbol. Takes a required `symbolName` plus `symbolKind` (Table/Page/Codeunit/Interface/Enum) and optional filters (`relationTypes`, `direction`, `scope`, `limit`). Exposed as the custom LSP method `al/symbolRelations` for non-VS-Code clients.
+- **`bclsp_inspectPage` tool** -- returns a Business Central page's control tree (areas/groups/fields/parts) or action tree. Takes a required `pageName` plus `content` (`Controls` default or `Actions`). Resolves pages defined in dependencies (e.g. "Customer Card"). Exposed as the custom LSP method `al/inspectPage`.
+- **Microsoft `almcp` MCP backend** -- both new tools are backed by Microsoft's `almcp` MCP server, spawned and owned by the wrapper. Backend discovery prefers the nuget `al` dotnet global tool (`~/.dotnet/tools`, 15 tools including `al_inspectpage`) and falls back to the AL VS Code extension's bundled `almcp` (12 tools, no `al_inspectpage`). `bclsp_inspectPage` requires the nuget `al` tool; when only the bundled `almcp` is present the wrapper returns an actionable error pointing to `dotnet tool install --global microsoft.dynamics.businesscentral.development.tools --prerelease`.
+- **EditorServices fallback for symbol relations** -- `al/symbolRelations` tries the MCP tool first, but Microsoft's `al_symbolrelations` MCP tool is currently broken by an upstream DI bug (`SymbolRelationsService` not registered), so the wrapper automatically falls back to the inner AL Language Server's native `al/symbolRelations` method, which works. Once Microsoft fixes the MCP tool the wrapper will prefer it automatically. Drafted upstream bug report in `docs/ms-almcp-symbolrelations-di-bug.md`.
+
 ## [1.11.4] - 2026-06-04
 
 ### Fixed

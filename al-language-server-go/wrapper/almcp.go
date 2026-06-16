@@ -1,0 +1,299 @@
+package wrapper
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+)
+
+// mcpBackend describes how to launch an almcp MCP server.
+type mcpBackend struct {
+	kind    string // "nuget" | "bundled"
+	command string // executable path
+}
+
+// args builds the spawn arguments for the given project + package cache.
+//
+// pkgCache may hold multiple paths joined by os.PathListSeparator. The
+// Microsoft almcp backends (both the nuget `al` tool and the extension-bundled
+// almcp) do NOT split --packagecachepath on the separator — they treat the
+// whole value as a single literal path. So when several cache paths are present
+// we emit one repeated `--packagecachepath <path>` flag per path, which the
+// backends accumulate. (Confirmed empirically: a `;`-joined value made
+// al_inspectpage return an empty control tree, repeated flags returned the
+// full tree.)
+func (b mcpBackend) args(projectDir, pkgCache string) []string {
+	cacheFlags := make([]string, 0, 2)
+	for _, p := range splitPathList(pkgCache) {
+		cacheFlags = append(cacheFlags, "--packagecachepath", p)
+	}
+	if b.kind == "nuget" {
+		args := []string{"launchmcpserver", projectDir}
+		args = append(args, cacheFlags...)
+		return append(args, "--transport", "stdio", "--nolog")
+	}
+	args := []string{"--transport", "stdio", "--projects", projectDir}
+	args = append(args, cacheFlags...)
+	return append(args, "--nolog")
+}
+
+// splitPathList splits an os.PathListSeparator-joined string into its non-empty
+// components. A value with no separator yields a single element.
+func splitPathList(joined string) []string {
+	if joined == "" {
+		return nil
+	}
+	parts := strings.Split(joined, string(os.PathListSeparator))
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// findNugetALTool locates the nuget `al` dotnet global tool, if installed.
+func findNugetALTool() string {
+	name := "al"
+	if runtime.GOOS == "windows" {
+		name = "al.exe"
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		p := filepath.Join(home, ".dotnet", "tools", name)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	if lp, err := exec.LookPath(name); err == nil {
+		return lp
+	}
+	return ""
+}
+
+// discoverMcpBackend prefers the nuget al tool (15 tools incl al_inspectpage),
+// falling back to the extension-bundled almcp (12 tools, no al_inspectpage).
+func discoverMcpBackend(extensionPath string) (mcpBackend, bool) {
+	if al := findNugetALTool(); al != "" {
+		return mcpBackend{kind: "nuget", command: al}, true
+	}
+	bundled := GetALMcpExecutable(extensionPath)
+	if _, err := os.Stat(bundled); err == nil {
+		return mcpBackend{kind: "bundled", command: bundled}, true
+	}
+	return mcpBackend{}, false
+}
+
+// ALMcpServer owns one almcp child process and an MCP client to it.
+type ALMcpServer struct {
+	mu       sync.Mutex
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	stderr   io.ReadCloser
+	client   *MCPClient
+	tools    map[string]bool
+	projects map[string]bool // set of project dirs registered with the running server
+	backend  mcpBackend
+	logFunc  func(format string, args ...interface{})
+
+	// exited is set by the background reaper when the current child's
+	// cmd.Wait() returns. It is guarded by mu so liveness can be checked
+	// without racing the os/exec internals that Wait mutates (reading
+	// cmd.ProcessState directly is unsafe before Wait returns).
+	exited bool
+}
+
+func NewALMcpServer(logFunc func(format string, args ...interface{})) *ALMcpServer {
+	return &ALMcpServer{tools: map[string]bool{}, projects: map[string]bool{}, logFunc: logFunc}
+}
+
+func (s *ALMcpServer) log(format string, args ...interface{}) {
+	if s.logFunc != nil {
+		s.logFunc("[almcp] "+format, args...)
+	}
+}
+
+// SetExtensionPath resolves the backend once the extension path is known.
+// Returns false when no almcp backend can be found.
+func (s *ALMcpServer) SetExtensionPath(extensionPath string) bool {
+	b, ok := discoverMcpBackend(extensionPath)
+	if ok {
+		s.mu.Lock()
+		s.backend = b
+		s.mu.Unlock()
+		s.log("backend: kind=%s command=%s", b.kind, b.command)
+	}
+	return ok
+}
+
+// EnsureRunning lazily spawns + initializes almcp for the given project.
+// The mutex is deliberately held for the whole setup so concurrent callers
+// serialize: only one spawn+initialize happens at a time.
+func (s *ALMcpServer) EnsureRunning(projectDir, pkgCache string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cmd != nil && !s.exited {
+		return nil
+	}
+	// A previous child exists but has exited (reaper set s.exited). Tear down
+	// its stale resources before respawning.
+	if s.cmd != nil {
+		s.stopLocked()
+	}
+	if s.backend.command == "" {
+		return fmt.Errorf("no almcp backend available")
+	}
+
+	spawnArgs := s.backend.args(projectDir, pkgCache)
+	s.log("spawning: %s %v (cwd=%s)", s.backend.command, spawnArgs, projectDir)
+	s.cmd = exec.Command(s.backend.command, spawnArgs...)
+	// Run the child with cwd=projectDir so it resolves --projects and any
+	// relative cache paths against the project root (defense in depth: the
+	// caller already passes absolute cache paths, but a relative --projects
+	// arg would otherwise resolve against the wrapper's cwd). Only set Dir when
+	// the directory actually exists — a nonexistent Dir makes Start() fail with
+	// a chdir error, and leaving it empty (inherit wrapper cwd) is the safe
+	// default when projectDir can't be entered.
+	if info, err := os.Stat(projectDir); err == nil && info.IsDir() {
+		s.cmd.Dir = projectDir
+	}
+	stdin, err := s.cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := s.cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := s.cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	if err := s.cmd.Start(); err != nil {
+		s.cmd = nil
+		return fmt.Errorf("failed to start almcp: %w", err)
+	}
+	s.stdin = stdin
+	s.stderr = stderr
+	s.exited = false
+	// Reap the child and mark it exited when Wait returns; otherwise the
+	// alive-check above would treat a dead child as "still running" forever.
+	c := s.cmd
+	go func() {
+		_ = c.Wait()
+		s.mu.Lock()
+		if s.cmd == c {
+			s.exited = true
+		}
+		s.mu.Unlock()
+	}()
+	s.log("started pid=%d (%s)", s.cmd.Process.Pid, s.backend.kind)
+	addProcessToJob(s.cmd.Process)
+	go drainReader(stderr, s.log)
+
+	s.client = NewMCPClient(stdin, bufio.NewReader(stdout), s.logFunc)
+	if err := s.client.Initialize("al-lsp-wrapper"); err != nil {
+		s.stopLocked()
+		return err
+	}
+	names, err := s.client.ListTools()
+	if err != nil {
+		s.stopLocked()
+		return err
+	}
+	s.tools = map[string]bool{}
+	for _, n := range names {
+		s.tools[n] = true
+	}
+	s.projects = map[string]bool{projectDir: true}
+	s.log("ready, tools=%v", names)
+	return nil
+}
+
+// HasTool reports whether the running backend exposes the named tool.
+func (s *ALMcpServer) HasTool(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.tools[name]
+}
+
+// CallTool forwards to the MCP client.
+func (s *ALMcpServer) CallTool(name string, args interface{}) (*ToolCallResult, error) {
+	s.mu.Lock()
+	client := s.client
+	s.mu.Unlock()
+	if client == nil {
+		return nil, fmt.Errorf("almcp not running")
+	}
+	return client.CallTool(name, args)
+}
+
+// AddProject registers an additional project with the running server.
+func (s *ALMcpServer) AddProject(projectDir string) {
+	if s.HasTool("al_addproject") {
+		_, _ = s.CallTool("al_addproject", map[string]interface{}{"projectPath": projectDir})
+	}
+}
+
+// EnsureProject ensures the server is running and that projectDir is registered.
+// If the server is not yet running it spawns one (with projectDir as the first
+// project). If the server is already running but does not know projectDir yet,
+// it calls AddProject (which calls CallTool) OUTSIDE the lock to avoid deadlock.
+func (s *ALMcpServer) EnsureProject(projectDir, pkgCache string) error {
+	if err := s.EnsureRunning(projectDir, pkgCache); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	known := s.projects[projectDir]
+	s.mu.Unlock()
+	if known {
+		return nil
+	}
+	s.AddProject(projectDir) // calls CallTool — must be outside the lock
+	s.mu.Lock()
+	s.projects[projectDir] = true
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *ALMcpServer) stopLocked() {
+	if s.cmd != nil && s.cmd.Process != nil {
+		s.cmd.Process.Kill()
+	}
+	if s.stdin != nil {
+		s.stdin.Close()
+		s.stdin = nil
+	}
+	if s.stderr != nil {
+		s.stderr.Close()
+		s.stderr = nil
+	}
+	s.cmd = nil
+	s.client = nil
+	s.tools = map[string]bool{}
+	s.exited = false
+}
+
+// Shutdown terminates the almcp process.
+func (s *ALMcpServer) Shutdown() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cmd == nil {
+		return
+	}
+	s.log("stopping almcp")
+	s.stopLocked()
+}
+
+func drainReader(r io.Reader, log func(string, ...interface{})) {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		log("stderr: %s", sc.Text())
+	}
+}

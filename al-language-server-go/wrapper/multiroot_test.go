@@ -88,6 +88,10 @@ func (m *mockWrapper) GetCallHierarchyServer() *CallHierarchyServer {
 	return m.callHierarchyServer
 }
 
+func (m *mockWrapper) GetALMcpServer() *ALMcpServer {
+	return nil
+}
+
 func (m *mockWrapper) WorkspaceFolders() []WorkspaceFolder {
 	m.mu.Lock()
 	defer m.mu.Unlock()
