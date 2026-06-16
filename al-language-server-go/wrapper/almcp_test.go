@@ -1,6 +1,8 @@
 package wrapper
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -48,4 +50,40 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func buildFakeAlmcp(t *testing.T) string {
+	t.Helper()
+	src := filepath.Join("testdata", "fakealmcp", "main.go")
+	out := filepath.Join(t.TempDir(), "fakealmcp")
+	if runtime.GOOS == "windows" {
+		out += ".exe"
+	}
+	cmd := exec.Command("go", "build", "-o", out, src)
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("build fake almcp: %v", err)
+	}
+	return out
+}
+
+func TestALMcpServerLifecycle(t *testing.T) {
+	fake := buildFakeAlmcp(t)
+
+	s := NewALMcpServer(func(string, ...interface{}) {})
+	s.backend = mcpBackend{kind: "bundled", command: fake} // inject fake
+	if err := s.EnsureRunning("C:/proj", "C:/proj/.alpackages"); err != nil {
+		t.Fatalf("EnsureRunning: %v", err)
+	}
+	if !s.HasTool("al_symbolrelations") {
+		t.Fatalf("expected al_symbolrelations in capability set")
+	}
+	res, err := s.CallTool("al_symbolrelations", map[string]interface{}{"parameters": map[string]string{"symbolName": "Customer"}})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected isError")
+	}
+	s.Shutdown()
 }
