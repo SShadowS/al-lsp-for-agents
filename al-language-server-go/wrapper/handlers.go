@@ -1691,5 +1691,7 @@ func GetDefaultHandlers() []Handler {
 		&CodeLensHandler{},
 		&SetActiveWorkspaceHandler{},
 		&DidChangeWorkspaceFoldersHandler{},
+		&SymbolRelationsHandler{},
+		&InspectPageHandler{},
 	}
 }
