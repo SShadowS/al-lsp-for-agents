@@ -2,7 +2,7 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
-## [Unreleased]
+## [1.12.0] - 2026-06-16
 
 ### Added
 - **`bclsp_symbolRelations` tool** -- finds how an AL object relates to others. Returns outgoing relations (SourceTable, TableRelation, Implements, Extends, ExtensionOf) and incoming relations (ExtendedBy, ImplementedBy, UsedAsSourceTable) for a symbol. Takes a required `symbolName` plus `symbolKind` (Table/Page/Codeunit/Interface/Enum) and optional filters (`relationTypes`, `direction`, `scope`, `limit`). Exposed as the custom LSP method `al/symbolRelations` for non-VS-Code clients.
