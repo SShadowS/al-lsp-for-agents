@@ -366,6 +366,50 @@
             "newName"
           ]
         }
+      },
+      {
+        "name": "bclsp_symbolRelations",
+        "displayName": "AL Symbol Relations",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "bclsp_symbolRelations",
+        "userDescription": "Find how an AL object relates to others (extends, implements, source table, extended by)",
+        "tags": ["al", "navigation", "relations"],
+        "modelDescription": "Get related symbols for an AL object: outgoing relations (SourceTable, TableRelation, Implements, Extends, ExtensionOf) and incoming relations (ExtendedBy, ImplementedBy, UsedAsSourceTable). Provide symbolName plus symbolKind (Table, Page, Codeunit, Interface, Enum). Covers dependencies, not just workspace source.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "symbolName": { "type": "string", "description": "Symbol name (e.g. 'Customer')" },
+            "symbolKind": { "type": "string", "description": "Table, Page, Codeunit, Interface, Enum, etc." },
+            "filters": {
+              "type": "object",
+              "description": "Optional filters",
+              "properties": {
+                "relationTypes": { "type": "array", "items": { "type": "string" }, "description": "e.g. ['SourceTable','ExtendedBy']" },
+                "direction": { "type": "string", "description": "outgoing | incoming | both" },
+                "scope": { "type": "string", "description": "project | dependencies | all" },
+                "limit": { "type": "number", "description": "Max results (<=200)" }
+              }
+            }
+          },
+          "required": ["symbolName"]
+        }
+      },
+      {
+        "name": "bclsp_inspectPage",
+        "displayName": "AL Inspect Page",
+        "canBeReferencedInPrompt": true,
+        "toolReferenceName": "bclsp_inspectPage",
+        "userDescription": "Inspect a Business Central page's control tree or action tree",
+        "tags": ["al", "page", "layout"],
+        "modelDescription": "Inspect a Business Central page layout (areas, groups, fields, parts) or action hierarchy. Provide pageName and content='Controls' (default) or 'Actions'. Resolves pages defined in dependencies (e.g. 'Customer Card'). Requires the AL build tools; if unavailable the tool reports how to install them.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "pageName": { "type": "string", "description": "Page name (e.g. 'Customer Card')" },
+            "content": { "type": "string", "enum": ["Controls", "Actions"], "description": "Controls (layout) or Actions. Default Controls." }
+          },
+          "required": ["pageName"]
+        }
       }
     ],
     "configuration": {
