@@ -1682,9 +1682,20 @@ func mcpProjectContext(w WrapperInterface) (projectDir, pkgCache string) {
 	paths := DiscoverPackageCachePaths(projectDir)
 	if len(paths) == 0 {
 		pkgCache = filepath.Join(projectDir, ".alpackages")
-	} else {
-		pkgCache = strings.Join(paths, string(os.PathListSeparator))
+		return projectDir, pkgCache
 	}
+	// almcp may be spawned without cwd=projectDir, so relative cache entries
+	// (DiscoverPackageCachePaths returns "./.alpackages" first) would not
+	// resolve and dependency symbols would be missing. Make every entry
+	// absolute against projectDir before joining — never pass a relative path.
+	abs := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(projectDir, p)
+		}
+		abs = append(abs, p)
+	}
+	pkgCache = strings.Join(abs, string(os.PathListSeparator))
 	return projectDir, pkgCache
 }
 

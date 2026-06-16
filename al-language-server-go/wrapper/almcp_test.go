@@ -10,18 +10,56 @@ import (
 )
 
 func TestMcpBackendArgs(t *testing.T) {
+	// Use a path with no os.PathListSeparator so it stays a single cache flag
+	// on every platform (Windows ';' vs Linux ':').
+	const proj = "/proj"
+	const cache = "/proj/.alpackages"
+
 	nuget := mcpBackend{kind: "nuget", command: "al"}
-	got := nuget.args("C:/proj", "C:/proj/.alpackages")
-	want := []string{"launchmcpserver", "C:/proj", "--packagecachepath", "C:/proj/.alpackages", "--transport", "stdio", "--nolog"}
+	got := nuget.args(proj, cache)
+	want := []string{"launchmcpserver", proj, "--packagecachepath", cache, "--transport", "stdio", "--nolog"}
 	if !equalStrings(got, want) {
 		t.Fatalf("nuget args = %v, want %v", got, want)
 	}
 
 	bundled := mcpBackend{kind: "bundled", command: "almcp"}
-	got = bundled.args("C:/proj", "C:/proj/.alpackages")
-	want = []string{"--transport", "stdio", "--projects", "C:/proj", "--packagecachepath", "C:/proj/.alpackages", "--nolog"}
+	got = bundled.args(proj, cache)
+	want = []string{"--transport", "stdio", "--projects", proj, "--packagecachepath", cache, "--nolog"}
 	if !equalStrings(got, want) {
 		t.Fatalf("bundled args = %v, want %v", got, want)
+	}
+}
+
+func TestMcpBackendArgsMultipleCachePaths(t *testing.T) {
+	// Multiple cache paths must become repeated --packagecachepath flags, NOT a
+	// single separator-joined value: the Microsoft almcp backends do not split
+	// the value, so a joined string points at one nonexistent path and returns
+	// no symbols (regression: al_inspectpage returned an empty control tree).
+	sep := string(os.PathListSeparator)
+	cache := "/proj/.alpackages" + sep + "/repo/.alpackages"
+
+	nuget := mcpBackend{kind: "nuget", command: "al"}
+	got := nuget.args("/proj", cache)
+	want := []string{
+		"launchmcpserver", "/proj",
+		"--packagecachepath", "/proj/.alpackages",
+		"--packagecachepath", "/repo/.alpackages",
+		"--transport", "stdio", "--nolog",
+	}
+	if !equalStrings(got, want) {
+		t.Fatalf("nuget multi-cache args = %v, want %v", got, want)
+	}
+
+	bundled := mcpBackend{kind: "bundled", command: "almcp"}
+	got = bundled.args("/proj", cache)
+	want = []string{
+		"--transport", "stdio", "--projects", "/proj",
+		"--packagecachepath", "/proj/.alpackages",
+		"--packagecachepath", "/repo/.alpackages",
+		"--nolog",
+	}
+	if !equalStrings(got, want) {
+		t.Fatalf("bundled multi-cache args = %v, want %v", got, want)
 	}
 }
 

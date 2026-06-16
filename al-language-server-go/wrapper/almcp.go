@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -18,11 +19,44 @@ type mcpBackend struct {
 }
 
 // args builds the spawn arguments for the given project + package cache.
+//
+// pkgCache may hold multiple paths joined by os.PathListSeparator. The
+// Microsoft almcp backends (both the nuget `al` tool and the extension-bundled
+// almcp) do NOT split --packagecachepath on the separator — they treat the
+// whole value as a single literal path. So when several cache paths are present
+// we emit one repeated `--packagecachepath <path>` flag per path, which the
+// backends accumulate. (Confirmed empirically: a `;`-joined value made
+// al_inspectpage return an empty control tree, repeated flags returned the
+// full tree.)
 func (b mcpBackend) args(projectDir, pkgCache string) []string {
-	if b.kind == "nuget" {
-		return []string{"launchmcpserver", projectDir, "--packagecachepath", pkgCache, "--transport", "stdio", "--nolog"}
+	cacheFlags := make([]string, 0, 2)
+	for _, p := range splitPathList(pkgCache) {
+		cacheFlags = append(cacheFlags, "--packagecachepath", p)
 	}
-	return []string{"--transport", "stdio", "--projects", projectDir, "--packagecachepath", pkgCache, "--nolog"}
+	if b.kind == "nuget" {
+		args := []string{"launchmcpserver", projectDir}
+		args = append(args, cacheFlags...)
+		return append(args, "--transport", "stdio", "--nolog")
+	}
+	args := []string{"--transport", "stdio", "--projects", projectDir}
+	args = append(args, cacheFlags...)
+	return append(args, "--nolog")
+}
+
+// splitPathList splits an os.PathListSeparator-joined string into its non-empty
+// components. A value with no separator yields a single element.
+func splitPathList(joined string) []string {
+	if joined == "" {
+		return nil
+	}
+	parts := strings.Split(joined, string(os.PathListSeparator))
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // findNugetALTool locates the nuget `al` dotnet global tool, if installed.
@@ -116,7 +150,19 @@ func (s *ALMcpServer) EnsureRunning(projectDir, pkgCache string) error {
 		return fmt.Errorf("no almcp backend available")
 	}
 
-	s.cmd = exec.Command(s.backend.command, s.backend.args(projectDir, pkgCache)...)
+	spawnArgs := s.backend.args(projectDir, pkgCache)
+	s.log("spawning: %s %v (cwd=%s)", s.backend.command, spawnArgs, projectDir)
+	s.cmd = exec.Command(s.backend.command, spawnArgs...)
+	// Run the child with cwd=projectDir so it resolves --projects and any
+	// relative cache paths against the project root (defense in depth: the
+	// caller already passes absolute cache paths, but a relative --projects
+	// arg would otherwise resolve against the wrapper's cwd). Only set Dir when
+	// the directory actually exists — a nonexistent Dir makes Start() fail with
+	// a chdir error, and leaving it empty (inherit wrapper cwd) is the safe
+	// default when projectDir can't be entered.
+	if info, err := os.Stat(projectDir); err == nil && info.IsDir() {
+		s.cmd.Dir = projectDir
+	}
 	stdin, err := s.cmd.StdinPipe()
 	if err != nil {
 		return err
