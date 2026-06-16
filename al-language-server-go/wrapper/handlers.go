@@ -168,6 +168,9 @@ type WrapperInterface interface {
 	// GetCallHierarchyServer returns the call hierarchy server (may be nil)
 	GetCallHierarchyServer() *CallHierarchyServer
 
+	// GetALMcpServer returns the almcp MCP server manager (never nil after New()).
+	GetALMcpServer() *ALMcpServer
+
 	// UpdateWorkspaceFolders adds/removes workspace folders from internal state
 	UpdateWorkspaceFolders(added []WorkspaceFolder, removed []WorkspaceFolder)
 

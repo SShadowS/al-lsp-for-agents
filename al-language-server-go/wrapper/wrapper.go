@@ -89,6 +89,9 @@ type ALLSPWrapper struct {
 	// Call hierarchy server
 	callHierarchyServer *CallHierarchyServer
 
+	// almcp MCP server (backs al/symbolRelations and al/inspectPage)
+	almcpServer *ALMcpServer
+
 	// Preview cache: materializes .al from .app archives to make
 	// dependency objects addressable via on-disk file:// URIs (so
 	// Claude Code's filePath-existence check on the LSP tool surface
@@ -123,6 +126,7 @@ func New() *ALLSPWrapper {
 		pendingReqs:         make(map[int]chan *Message),
 		responseQueue:       make(map[int]*Message),
 		handlers:            GetDefaultHandlers(),
+		almcpServer:         NewALMcpServer(nil), // logFunc wired in Run()
 	}
 }
 
@@ -160,6 +164,12 @@ func (w *ALLSPWrapper) Run() error {
 		return fmt.Errorf("AL extension not found: %w", err)
 	}
 	w.Log("Found AL extension: %s", extensionPath)
+
+	// Point the almcp manager at the resolved extension (for the bundled fallback).
+	w.almcpServer.logFunc = w.Log
+	if !w.almcpServer.SetExtensionPath(extensionPath) {
+		w.Log("almcp backend not found (nuget al tool absent and no bundled almcp); al/symbolRelations and al/inspectPage will error until available")
+	}
 
 	// Get executable path
 	executable := GetALLSPExecutable(extensionPath)
@@ -639,6 +649,9 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 		// Shutdown call hierarchy server first
 		if w.callHierarchyServer != nil {
 			w.callHierarchyServer.Shutdown()
+		}
+		if w.almcpServer != nil {
+			w.almcpServer.Shutdown()
 		}
 		if total := w.uriStats.Total(); total > 0 {
 			w.Log("[URI-FIX] session totals: %d malformed file URIs normalized before reaching the client", total)
@@ -1359,6 +1372,11 @@ func (w *ALLSPWrapper) waitForProjectLoad(workspacePath string) {
 // GetCallHierarchyServer returns the call hierarchy server
 func (w *ALLSPWrapper) GetCallHierarchyServer() *CallHierarchyServer {
 	return w.callHierarchyServer
+}
+
+// GetALMcpServer returns the almcp MCP server manager.
+func (w *ALLSPWrapper) GetALMcpServer() *ALMcpServer {
+	return w.almcpServer
 }
 
 // WorkspaceFolders returns a snapshot of the current workspace folders.
