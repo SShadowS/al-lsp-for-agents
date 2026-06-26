@@ -2,6 +2,12 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.12.1] - 2026-06-26
+
+### Fixed
+- **EventSubscribers and other framework-invoked procedures no longer flagged `unused-procedure`** ([#20](https://github.com/SShadowS/al-lsp-for-agents/issues/20)) -- procedures with `[EventSubscriber]`, `[Test]`, test handler attributes (`[ConfirmHandler]`, `[MessageHandler]`, `[PageHandler]`, ...), and public event publishers (`[IntegrationEvent]`/`[BusinessEvent]`) are invoked by a framework or a downstream app rather than by a direct call, so the code-quality `unused-procedure` warning no longer fires on them. `[InternalEvent]` publishers are still flagged when orphaned, since they can only be subscribed within the same app -- an unused one is genuine dead code. Delivered by [al-call-hierarchy v0.9.0](https://github.com/SShadowS/al-call-hierarchy/releases/tag/v0.9.0).
+- **Diagnostics no longer disappear after running `prepareCallHierarchy`** -- the wrapper fronts two backends (the Microsoft AL Language Server and the al-call-hierarchy server) over one client connection. Because LSP `publishDiagnostics` replaces all diagnostics for a file, the two backends were overwriting each other: al-call-hierarchy's code-quality warnings vanished as soon as the AL LS republished a file (which `prepareCallHierarchy` triggers), leaving only the compiler diagnostics. The wrapper now merges diagnostics per file across both backends so neither can erase the other's.
+
 ## [1.12.0] - 2026-06-16
 
 ### Added
