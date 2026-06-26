@@ -75,19 +75,24 @@ type ALLSPWrapper struct {
 	activeProject       string // Currently active project root (normalized path)
 
 	// Request tracking
-	requestID      int
-	pendingMu      sync.Mutex
-	pendingReqs    map[int]chan *Message
+	requestID   int
+	pendingMu   sync.Mutex
+	pendingReqs map[int]chan *Message
 
 	// Response queue for requests we sent to LSP
-	responseMu     sync.Mutex
-	responseQueue  map[int]*Message
+	responseMu    sync.Mutex
+	responseQueue map[int]*Message
 
 	// Handlers
 	handlers []Handler
 
 	// Call hierarchy server
 	callHierarchyServer *CallHierarchyServer
+
+	// diagMerger reconciles publishDiagnostics from the AL LS and the
+	// al-call-hierarchy server so neither backend clobbers the other's
+	// diagnostics for a URI (issue #20 symptom #2).
+	diagMerger *DiagnosticMerger
 
 	// almcp MCP server (backs al/symbolRelations and al/inspectPage)
 	almcpServer *ALMcpServer
@@ -231,6 +236,9 @@ func (w *ALLSPWrapper) Run() error {
 	// Setup client communication
 	w.clientReader = bufio.NewReader(os.Stdin)
 	w.clientWriter = os.Stdout
+	if w.diagMerger == nil {
+		w.diagMerger = NewDiagnosticMerger()
+	}
 
 	// Start goroutines
 	errChan := make(chan error, 2)
@@ -413,6 +421,13 @@ func (w *ALLSPWrapper) readStderr() {
 func (w *ALLSPWrapper) writeToClient(msg *Message) error {
 	if n, orig, norm := SanitizeOutboundMessage(msg); n > 0 {
 		w.uriStats.record(w.Log, "AL-LS->client", msg.Method, n, orig, norm)
+	}
+	// Merge AL LS diagnostics with the al-call-hierarchy server's so neither
+	// backend's publishDiagnostics erases the other for a URI (issue #20 #2).
+	// Runs after sanitization so the URI key matches the call-hierarchy path,
+	// which sanitizes with the same function.
+	if msg != nil && msg.Method == "textDocument/publishDiagnostics" && w.diagMerger != nil {
+		w.diagMerger.MergePublishDiagnostics(diagBackendALLS, msg)
 	}
 	return WriteMessage(w.clientWriter, msg)
 }
@@ -1416,6 +1431,11 @@ func (w *ALLSPWrapper) startCallHierarchyServer() {
 	w.callHierarchyServer.SetSanitizer(func(msg *Message) {
 		if n, orig, norm := SanitizeOutboundMessage(msg); n > 0 {
 			w.uriStats.record(w.Log, "call-hierarchy->client", msg.Method, n, orig, norm)
+		}
+		// Merge with AL LS diagnostics so a later AL LS publish (e.g. triggered
+		// by prepareCallHierarchy) can't erase these, and vice versa (#20 #2).
+		if msg != nil && msg.Method == "textDocument/publishDiagnostics" && w.diagMerger != nil {
+			w.diagMerger.MergePublishDiagnostics(diagBackendCallHierarchy, msg)
 		}
 	})
 
