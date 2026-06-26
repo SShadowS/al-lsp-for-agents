@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.12.2] - 2026-06-27
+
+### Fixed
+- **Enriched hover and code-quality diagnostics restored on the v3 AL grammar.** The bundled al-call-hierarchy binary is updated to [v0.9.3](https://github.com/SShadowS/al-call-hierarchy/releases/tag/v0.9.3), which completes the port to tree-sitter-al v3. v1.12.1 shipped a binary that had been built against the v3 grammar without the matching source changes, so field/action property extraction (enriched hover) returned nothing and several code-quality detectors silently stopped finding candidates. v0.9.3 fixes the full set: every grammar-dependent traversal now descends the v3 wrapper nodes (`statement_block`/`declaration_body`/...), and its release pipeline now runs the whole test suite as a gate so this class of mismatch can't ship again.
+
 ## [1.12.1] - 2026-06-26
 
 ### Fixed
