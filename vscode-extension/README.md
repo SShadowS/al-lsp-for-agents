@@ -37,7 +37,7 @@ All declared properties are extracted — if a property isn't shown, it genuinel
 
 ### Code Quality Diagnostics
 
-Real-time diagnostics powered by [al-call-hierarchy](https://github.com/SShadowS/al-call-hierarchy):
+Real-time diagnostics powered by [al-sem](https://github.com/SShadowS/al-sem):
 
 - Unused procedures (no callers)
 - High cyclomatic complexity
@@ -53,7 +53,7 @@ Diagnostic thresholds are configurable at two levels. All values are optional �
 
 #### Global Defaults
 
-Set defaults for all your projects in `~/.al-call-hierarchy/config.json`:
+Set defaults for all your projects in `~/.al-sem/config.json`:
 
 ```json
 {
@@ -66,7 +66,7 @@ Set defaults for all your projects in `~/.al-call-hierarchy/config.json`:
 
 #### Per-Workspace Overrides
 
-Override for a specific project in `{workspace}/.al-call-hierarchy.json`:
+Override for a specific project in `{workspace}/.al-sem.json`:
 
 ```json
 {
@@ -81,6 +81,8 @@ Override for a specific project in `{workspace}/.al-call-hierarchy.json`:
 ```
 
 Config is merged per field: **built-in defaults → global → workspace**. A workspace config only needs to specify fields it wants to override. Set `"enabled": false` on any category to disable it entirely.
+
+These files were called `~/.al-call-hierarchy/config.json` and `{workspace}/.al-call-hierarchy.json` before the analysis engine was renamed to al-sem. Both old names are still read when the new ones are absent, so existing setups keep working — no migration needed.
 
 ### Call Hierarchy
 

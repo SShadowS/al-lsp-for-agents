@@ -38,17 +38,17 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath -ldflags="-s -w" -o ../al-lsp-wrapper${{ matrix.ext }} .
 
-      # Downloads the exact asset name from al-call-hierarchy releases
-      # Note: al-call-hierarchy must be a public repo for github.token to work
-      - name: Download al-call-hierarchy
+      # Downloads the exact asset name from al-sem releases
+      # Note: al-sem must be a public repo for github.token to work
+      - name: Download al-sem
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            gh release download --repo SShadowS/al-call-hierarchy --pattern "al-call-hierarchy-windows-x64.exe" -D .
+            gh release download --repo SShadowS/al-sem --pattern "al-call-hierarchy-windows-x64.exe" -D .
           else
-            gh release download --repo SShadowS/al-call-hierarchy --pattern "al-call-hierarchy-linux-x64" -D .
+            gh release download --repo SShadowS/al-sem --pattern "al-call-hierarchy-linux-x64" -D .
           fi
 
       - name: Upload artifact
