@@ -75,6 +75,13 @@ if [ "$SKIP_RUST" = false ]; then
     cargo build --release --target x86_64-pc-windows-msvc 2>/dev/null || cargo build --release
     cp target/release/al-call-hierarchy.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/" 2>/dev/null || \
     cp target/x86_64-pc-windows-msvc/release/al-call-hierarchy.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/"
+    # `alsem` is the CLI half of the same cargo workspace, and `cargo build` already
+    # produces it — it was simply never shipped. Review agents call it over Bash
+    # (`alsem analyze <app> --format pr-summary`), which is why it travels with the
+    # plugin: the entrypoint git-pulls this repo on every container start, so a new
+    # binary here reaches every container without an image rebuild.
+    cp target/release/alsem.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/" 2>/dev/null || \
+    cp target/x86_64-pc-windows-msvc/release/alsem.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/"
     echo "  -> Copied to al-language-server-go-windows/bin/"
 
     # Cross-compile for Linux (requires cross + Docker in Linux containers mode)
@@ -83,13 +90,35 @@ if [ "$SKIP_RUST" = false ]; then
             # Mount tree-sitter-al into the Docker container and tell build.rs where to find it.
             # MSYS_NO_PATHCONV=1 prevents Git Bash from mangling /tree-sitter-al to C:/Program Files/Git/...
             export TREE_SITTER_AL_PATH="/tree-sitter-al"
-            export CROSS_CONTAINER_OPTS="-v $TREE_SITTER_AL_DIR:/tree-sitter-al:ro"
+            # `-e CARGO_BUILD_RUSTC_WRAPPER=` blanks the rustc wrapper inside the
+            # container. A host ~/.cargo/config.toml setting `rustc-wrapper = "sccache"`
+            # is read by cargo in there too, but sccache is not installed in the cross
+            # image, so every build dies with
+            #   error: could not execute process `sccache rustc -vV` (never executed)
+            export CROSS_CONTAINER_OPTS="-v $TREE_SITTER_AL_DIR:/tree-sitter-al:ro -e CARGO_BUILD_RUSTC_WRAPPER="
 
             echo "Building for Linux (using cross)..."
-            MSYS_NO_PATHCONV=1 cross build --release --target x86_64-unknown-linux-gnu
-            cp target/x86_64-unknown-linux-gnu/release/al-call-hierarchy "$SCRIPT_DIR/al-language-server-go-linux/bin/"
-            chmod +x "$SCRIPT_DIR/al-language-server-go-linux/bin/al-call-hierarchy"
-            git -C "$SCRIPT_DIR" update-index --chmod=+x al-language-server-go-linux/bin/al-call-hierarchy
+            # --no-default-features drops the `telemetry` feature, which is default-on and
+            # pulls opentelemetry-application-insights -> reqwest -> openssl-sys. The cross
+            # image has no libssl-dev, so with telemetry on the build dies in openssl-sys
+            # ("Could not find directory of OpenSSL installation"). Dropping it is also what
+            # we want in the container on its own merits: these binaries run over
+            # customer-adjacent source, and this build has no network stack at all.
+            # The Windows build above keeps default features — it is a local dev binary.
+            if ! MSYS_NO_PATHCONV=1 cross build --release --target x86_64-unknown-linux-gnu --no-default-features; then
+                # Without this the script exits 0 with the Linux binaries silently
+                # untouched, and stale ones ship to every container on the next pull.
+                echo "  ERROR: Linux cross-compilation FAILED — Linux binaries NOT updated" >&2
+                exit 1
+            fi
+            for b in al-call-hierarchy alsem; do
+                cp "target/x86_64-unknown-linux-gnu/release/$b" "$SCRIPT_DIR/al-language-server-go-linux/bin/"
+                chmod +x "$SCRIPT_DIR/al-language-server-go-linux/bin/$b"
+                # The +x bit has to be recorded in the index too: the container consumes
+                # this repo via `git pull`, so a binary that is executable only in this
+                # working tree arrives unexecutable everywhere else.
+                git -C "$SCRIPT_DIR" update-index --chmod=+x "al-language-server-go-linux/bin/$b" 2>/dev/null || true
+            done
             echo "  -> Copied to al-language-server-go-linux/bin/ (with +x)"
         fi
     else
