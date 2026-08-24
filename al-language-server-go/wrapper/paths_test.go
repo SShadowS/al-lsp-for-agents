@@ -3,6 +3,7 @@ package wrapper
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -56,8 +57,8 @@ func TestFindALExtension_NewestAcrossMultipleDirectories(t *testing.T) {
 	tmpHome := t.TempDir()
 
 	// Create extensions in different VS Code variant directories
-	createTestExtension(t, tmpHome, ".vscode", "16.0.100")           // Stable, older
-	createTestExtension(t, tmpHome, ".vscode-insiders", "17.0.200")  // Insiders, newer
+	createTestExtension(t, tmpHome, ".vscode", "16.0.100")                // Stable, older
+	createTestExtension(t, tmpHome, ".vscode-insiders", "17.0.200")       // Insiders, newer
 	expectedPath := createTestExtension(t, tmpHome, ".cursor", "18.0.50") // Cursor, newest
 
 	result, err := findALExtensionInHome(tmpHome)
@@ -170,10 +171,10 @@ func TestFindALExtension_IgnoresNonMatchingDirectories(t *testing.T) {
 	os.MkdirAll(vscodeExts, 0755)
 
 	// Non-matching directories (should be ignored)
-	os.MkdirAll(filepath.Join(vscodeExts, "ms-dynamics-smb.al"), 0755)         // Missing version
-	os.MkdirAll(filepath.Join(vscodeExts, "ms-dynamics-smb.al-abc"), 0755)     // Non-numeric version
-	os.MkdirAll(filepath.Join(vscodeExts, "other-extension-1.0.0"), 0755)      // Different extension
-	os.MkdirAll(filepath.Join(vscodeExts, "ms-dynamics-smb.al-17.0"), 0755)    // Incomplete version
+	os.MkdirAll(filepath.Join(vscodeExts, "ms-dynamics-smb.al"), 0755)      // Missing version
+	os.MkdirAll(filepath.Join(vscodeExts, "ms-dynamics-smb.al-abc"), 0755)  // Non-numeric version
+	os.MkdirAll(filepath.Join(vscodeExts, "other-extension-1.0.0"), 0755)   // Different extension
+	os.MkdirAll(filepath.Join(vscodeExts, "ms-dynamics-smb.al-17.0"), 0755) // Incomplete version
 
 	// One valid extension
 	expectedPath := createTestExtension(t, tmpHome, ".vscode", "17.0.100")
@@ -469,5 +470,87 @@ func TestVSCodeExtensionDirs_ContainsAllVariants(t *testing.T) {
 		if !found {
 			t.Errorf("Expected vsCodeExtensionDirs to contain %q", dir)
 		}
+	}
+}
+
+// legacyPlatformBinDir returns the per-platform bin subfolder used by AL
+// extension universal VSIXes (up to 18.0.2x): bin/win32, bin/linux, bin/darwin.
+func legacyPlatformBinDir(t *testing.T) string {
+	t.Helper()
+	switch runtime.GOOS {
+	case "windows":
+		return "win32"
+	case "darwin":
+		return "darwin"
+	default:
+		return "linux"
+	}
+}
+
+func hostExecutableName() string {
+	if runtime.GOOS == "windows" {
+		return "Microsoft.Dynamics.Nav.EditorServices.Host.exe"
+	}
+	return "Microsoft.Dynamics.Nav.EditorServices.Host"
+}
+
+func almcpExecutableName() string {
+	if runtime.GOOS == "windows" {
+		return "almcp.exe"
+	}
+	return "almcp"
+}
+
+// touchFile creates an empty file, creating parent directories as needed.
+func touchFile(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(path, nil, 0755); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+}
+
+func TestGetALLSPExecutable_FlatBinLayout(t *testing.T) {
+	// AL extension builds from 18.0.2668733 (prerelease) on are platform-specific
+	// VSIXes with the host directly in bin/ — no bin/win32|linux|darwin subfolder.
+	ext := t.TempDir()
+	flat := filepath.Join(ext, "bin", hostExecutableName())
+	touchFile(t, flat)
+
+	if got := GetALLSPExecutable(ext); got != flat {
+		t.Fatalf("GetALLSPExecutable = %q, want flat-layout path %q", got, flat)
+	}
+}
+
+func TestGetALLSPExecutable_LegacyBinLayout(t *testing.T) {
+	ext := t.TempDir()
+	legacy := filepath.Join(ext, "bin", legacyPlatformBinDir(t), hostExecutableName())
+	touchFile(t, legacy)
+
+	if got := GetALLSPExecutable(ext); got != legacy {
+		t.Fatalf("GetALLSPExecutable = %q, want legacy-layout path %q", got, legacy)
+	}
+}
+
+func TestGetALLSPExecutable_MissingDefaultsToLegacy(t *testing.T) {
+	// When neither layout exists the legacy path is returned unchanged so the
+	// caller's "executable not found" error stays identical to prior behavior.
+	ext := t.TempDir()
+	legacy := filepath.Join(ext, "bin", legacyPlatformBinDir(t), hostExecutableName())
+
+	if got := GetALLSPExecutable(ext); got != legacy {
+		t.Fatalf("GetALLSPExecutable = %q, want legacy default %q", got, legacy)
+	}
+}
+
+func TestGetALMcpExecutable_FlatBinLayout(t *testing.T) {
+	ext := t.TempDir()
+	flat := filepath.Join(ext, "bin", almcpExecutableName())
+	touchFile(t, flat)
+
+	if got := GetALMcpExecutable(ext); got != flat {
+		t.Fatalf("GetALMcpExecutable = %q, want flat-layout path %q", got, flat)
 	}
 }

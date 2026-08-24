@@ -95,42 +95,47 @@ func findALExtensionInHome(home string) (string, error) {
 	return alExtensions[0].path, nil
 }
 
+// legacyBinDir returns the per-platform bin subfolder used by AL extension
+// universal VSIXes up to 18.0.2x: bin/win32, bin/linux, bin/darwin.
+func legacyBinDir() string {
+	switch runtime.GOOS {
+	case "linux":
+		return "linux"
+	case "darwin":
+		return "darwin"
+	default:
+		return "win32"
+	}
+}
+
+// resolveExtensionBinary locates an extension-bundled binary across the two
+// bin layouts the AL extension has shipped: platform-specific VSIXes from
+// 18.0.2668733 (prerelease) on put binaries directly in bin/, while older
+// universal VSIXes used bin/win32|linux|darwin. Returns the first candidate
+// that exists on disk; when neither does, returns the legacy path so callers'
+// "not found" errors match prior behavior.
+func resolveExtensionBinary(extensionPath, name string) string {
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	flat := filepath.Join(extensionPath, "bin", name)
+	legacy := filepath.Join(extensionPath, "bin", legacyBinDir(), name)
+	for _, p := range []string{flat, legacy} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return legacy
+}
+
 // GetALLSPExecutable returns the path to the AL Language Server executable
 func GetALLSPExecutable(extensionPath string) string {
-	var binDir, executable string
-
-	switch runtime.GOOS {
-	case "windows":
-		binDir = "win32"
-		executable = "Microsoft.Dynamics.Nav.EditorServices.Host.exe"
-	case "linux":
-		binDir = "linux"
-		executable = "Microsoft.Dynamics.Nav.EditorServices.Host"
-	case "darwin":
-		binDir = "darwin"
-		executable = "Microsoft.Dynamics.Nav.EditorServices.Host"
-	default:
-		binDir = "win32"
-		executable = "Microsoft.Dynamics.Nav.EditorServices.Host.exe"
-	}
-
-	return filepath.Join(extensionPath, "bin", binDir, executable)
+	return resolveExtensionBinary(extensionPath, "Microsoft.Dynamics.Nav.EditorServices.Host")
 }
 
 // GetALMcpExecutable returns the path to the extension-bundled almcp apphost.
 func GetALMcpExecutable(extensionPath string) string {
-	var binDir, executable string
-	switch runtime.GOOS {
-	case "windows":
-		binDir, executable = "win32", "almcp.exe"
-	case "linux":
-		binDir, executable = "linux", "almcp"
-	case "darwin":
-		binDir, executable = "darwin", "almcp"
-	default:
-		binDir, executable = "win32", "almcp.exe"
-	}
-	return filepath.Join(extensionPath, "bin", binDir, executable)
+	return resolveExtensionBinary(extensionPath, "almcp")
 }
 
 // stripWindowsNamespacePrefix removes the Windows extended-length path prefix
