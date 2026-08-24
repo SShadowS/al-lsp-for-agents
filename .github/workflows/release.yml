@@ -9,6 +9,13 @@ permissions:
 
 jobs:
   build:
+    permissions:
+      contents: read
+      id-token: write  # OIDC for azure/login (Windows signing)
+    # The federated credential matches subject repo:...:environment:release —
+    # flexible (wildcard tag) credentials are rejected by the Entra tenant, so
+    # the job binds to a GitHub environment for a stable OIDC subject.
+    environment: release
     strategy:
       matrix:
         include:
@@ -50,6 +57,37 @@ jobs:
           else
             gh release download --repo SShadowS/al-sem --pattern "al-call-hierarchy-linux-x64" -D .
           fi
+
+      # Authenticode-sign the Windows binaries via Azure Artifact Signing
+      # (Trusted Signing). Steps SKIP cleanly until the Azure side is
+      # configured: repo vars AZURE_SIGNING_ENDPOINT / AZURE_SIGNING_ACCOUNT /
+      # AZURE_SIGNING_PROFILE and secrets AZURE_TENANT_ID / AZURE_CLIENT_ID /
+      # AZURE_SUBSCRIPTION_ID (OIDC federated credential, no client secret).
+      # al-call-hierarchy.exe is also signed upstream in al-sem CI; signing it
+      # again here replaces the signature with the same certificate and covers
+      # al-sem releases cut before signing existed there.
+      - name: Azure login
+        if: matrix.goos == 'windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign Windows binaries
+        if: matrix.goos == 'windows' && vars.AZURE_SIGNING_ACCOUNT != ''
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_SIGNING_PROFILE }}
+          # The action requires rooted (absolute) paths
+          files: |
+            ${{ github.workspace }}\al-lsp-wrapper.exe
+            ${{ github.workspace }}\al-call-hierarchy-windows-x64.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -73,15 +73,23 @@ if [ "$SKIP_RUST" = false ]; then
 
     echo "Building for Windows..."
     cargo build --release --target x86_64-pc-windows-msvc 2>/dev/null || cargo build --release
-    cp target/release/al-call-hierarchy.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/" 2>/dev/null || \
-    cp target/x86_64-pc-windows-msvc/release/al-call-hierarchy.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/"
+    # Copy whichever artifact the build above actually wrote. Both target dirs can
+    # exist at once (an ad-hoc plain `cargo build --release` leaves target/release/
+    # behind), and a fixed preference order silently ships the STALE one — that
+    # exact miss shipped a pre-version-bump alsem once. Newest mtime wins.
     # `alsem` is the CLI half of the same cargo workspace, and `cargo build` already
     # produces it — it was simply never shipped. Review agents call it over Bash
     # (`alsem analyze <app> --format pr-summary`), which is why it travels with the
     # plugin: the entrypoint git-pulls this repo on every container start, so a new
     # binary here reaches every container without an image rebuild.
-    cp target/release/alsem.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/" 2>/dev/null || \
-    cp target/x86_64-pc-windows-msvc/release/alsem.exe "$SCRIPT_DIR/al-language-server-go-windows/bin/"
+    for b in al-call-hierarchy.exe alsem.exe; do
+        newest=$(ls -t "target/x86_64-pc-windows-msvc/release/$b" "target/release/$b" 2>/dev/null | head -1)
+        if [ -z "$newest" ]; then
+            echo "  ERROR: no built $b found in either target dir" >&2
+            exit 1
+        fi
+        cp "$newest" "$SCRIPT_DIR/al-language-server-go-windows/bin/"
+    done
     echo "  -> Copied to al-language-server-go-windows/bin/"
 
     # Cross-compile for Linux (requires cross + Docker in Linux containers mode)
