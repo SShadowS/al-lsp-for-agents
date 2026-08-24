@@ -2,6 +2,18 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.13.0] - 2026-08-24
+
+### Fixed
+- **Wrapper crash with AL extension 18.0.2668733 and newer** -- recent AL extension builds are platform-specific VSIXes that place `Microsoft.Dynamics.Nav.EditorServices.Host` and `almcp` directly in `bin/`; the `bin/win32|linux|darwin` subfolders are gone. The wrapper only looked in the old location, so it failed to spawn the AL Language Server, crashed on startup, and VS Code disabled it after 5 restarts. The wrapper now probes the new flat layout first and falls back to the legacy one, so both old and new AL extension versions work. Known limitation: the new host is framework-dependent on .NET 10, so the machine needs a system-wide .NET 10 runtime (the official AL extension side-loads a private runtime the wrapper cannot see); a fallback is planned.
+
+### Changed
+- Bundled al-call-hierarchy engine updated to [al-sem v1.1.1](https://github.com/SShadowS/al-sem/releases/tag/v1.1.1), built on the tree-sitter-al v4.0.1 grammar (a breaking parse-tree release upstream, absorbed with no change to the analysis surface).
+- All Windows binaries shipped from the repo are now Authenticode-signed via Azure Trusted Signing.
+
+### Added
+- The `alsem` analysis CLI ships alongside the language server in the Claude Code plugin dirs, so agent containers can call `alsem analyze` directly.
+
 ## [1.12.2] - 2026-06-27
 
 ### Fixed
