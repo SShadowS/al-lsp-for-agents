@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.13.1] - 2026-08-24
+
+### Changed
+- **Documentation only; no code changes.** Corrects the 1.13.0 entry below, which described recent AL extension builds as "platform-specific VSIXes". Verified against the published packages: the AL extension is still a single universal VSIX (the marketplace has no per-platform package for it). What 18.0.2668733 actually changed is that it became framework-dependent -- portable IL plus a Windows-only apphost, with the per-platform native binaries removed. The corrected entry also records that this leaves no binary for the wrapper to launch on Linux or macOS, which the original text did not mention.
+
 ## [1.13.0] - 2026-08-24
 
 ### Fixed
