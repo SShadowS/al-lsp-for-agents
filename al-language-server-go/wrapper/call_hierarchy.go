@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,8 +28,13 @@ type CallHierarchyServer struct {
 	// code-quality analysis entirely. Set from the wrapper's own flag.
 	NoDiagnostics bool
 
-	mu         sync.Mutex
-	pendingMu  sync.Mutex
+	// notifStats aggregates forwarded notifications so a chatty backend
+	// cannot bury the log (see notification_stats.go for the incident that
+	// motivated this).
+	notifStats *notificationStats
+
+	mu          sync.Mutex
+	pendingMu   sync.Mutex
 	pendingReqs map[int]chan *Message
 
 	// Client writer for forwarding notifications
@@ -55,6 +61,7 @@ func NewCallHierarchyServer(logFunc func(format string, args ...interface{})) *C
 	return &CallHierarchyServer{
 		pendingReqs: make(map[int]chan *Message),
 		logFunc:     logFunc,
+		notifStats:  newNotificationStats(),
 	}
 }
 
@@ -156,12 +163,55 @@ func (s *CallHierarchyServer) Start(executable string) error {
 	return nil
 }
 
-// readStderr drains stderr to prevent blocking
+// readStderr drains stderr to prevent blocking.
+//
+// It also samples the child's memory whenever al-sem reports finishing a
+// root's program snapshot. That is the exact moment this process's memory
+// steps up (each root retains its own dependency closure), and there is at
+// most one such line per configured root, so the sampling is bounded by
+// workspace size rather than by traffic. A memory report was the single
+// thing missing when diagnosing the 17 GB multi-root incident: the log
+// described everything except the resource being asked about.
 func (s *CallHierarchyServer) readStderr() {
 	scanner := bufio.NewScanner(s.stderr)
 	for scanner.Scan() {
-		s.log("stderr: %s", scanner.Text())
+		line := scanner.Text()
+		s.log("stderr: %s", line)
+		if strings.Contains(line, snapshotBuiltMarker) {
+			s.logMemory("after root snapshot build")
+		}
 	}
+}
+
+// snapshotBuiltMarker is al-sem's per-root "snapshot is ready" log text.
+// Matched as a substring rather than parsed: if al-sem's wording drifts we
+// silently lose a diagnostic sample, never correctness.
+const snapshotBuiltMarker = "Built program snapshot for workspace root"
+
+// logMemory reports the al-sem child's working set. Silent when the process
+// is gone or the platform cannot report it — diagnostics must never fail a
+// running session.
+func (s *CallHierarchyServer) logMemory(when string) {
+	s.mu.Lock()
+	cmd := s.cmd
+	s.mu.Unlock()
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	if cur, peak, ok := processMemoryMB(cmd.Process.Pid); ok {
+		s.log("memory %s: working set %d MB (peak %d MB)", when, cur, peak)
+	}
+}
+
+// LogSessionSummary emits the end-of-session tallies: what was forwarded and
+// what it cost. One line each, only when there is something to report.
+func (s *CallHierarchyServer) LogSessionSummary() {
+	if s.notifStats != nil {
+		if summary := s.notifStats.Summary(); summary != "" {
+			s.log("session totals: forwarded notifications %s", summary)
+		}
+	}
+	s.logMemory("at shutdown")
 }
 
 // readResponses reads responses from the al-call-hierarchy process
@@ -192,7 +242,12 @@ func (s *CallHierarchyServer) readResponses() {
 			s.clientWriterMu.Unlock()
 
 			if writer != nil {
-				s.log("Forwarding notification to client: %s", msg.Method)
+				// Aggregated, not per-message: al-sem publishes one
+				// diagnostics notification per file per swap, which on a
+				// large workspace is thousands of identical log lines.
+				if shouldLog, total := s.notifStats.record(msg.Method); shouldLog {
+					s.log("Forwarding notifications to client: %s (session total %d)", msg.Method, total)
+				}
 				if s.sanitizeOutbound != nil {
 					s.sanitizeOutbound(msg)
 				}

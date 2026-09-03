@@ -68,3 +68,40 @@ func getParentPid(pid int) int {
 	}
 	return ppid
 }
+
+// processMemoryMB returns (currentMB, peakMB) resident set for a PID by
+// reading /proc/<pid>/status. ok is false when unavailable (a non-Linux
+// unix, or the process is gone) — memory reporting is diagnostics only and
+// must never be load-bearing.
+func processMemoryMB(pid int) (current, peak uint64, ok bool) {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		return 0, 0, false
+	}
+	readKB := func(prefix string) (uint64, bool) {
+		for _, line := range strings.Split(string(data), "\n") {
+			if !strings.HasPrefix(line, prefix) {
+				continue
+			}
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				return 0, false
+			}
+			kb, err := strconv.ParseUint(fields[1], 10, 64)
+			if err != nil {
+				return 0, false
+			}
+			return kb, true
+		}
+		return 0, false
+	}
+	cur, okCur := readKB("VmRSS:")
+	pk, okPeak := readKB("VmHWM:")
+	if !okCur {
+		return 0, 0, false
+	}
+	if !okPeak {
+		pk = cur
+	}
+	return cur / 1024, pk / 1024, true
+}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -149,6 +150,12 @@ func (w *ALLSPWrapper) Run() error {
 	}
 
 	w.Log("AL LSP Wrapper (Go) starting...")
+	// One-line session header: the facts every triage starts from, together
+	// rather than scattered across the first fifty lines. `os.Args[1:]` is
+	// the launcher's flags verbatim, which is how you tell (for example)
+	// whether --no-diagnostics was actually in effect.
+	w.Log("session: pid=%d os=%s/%s launcher=%q flags=%v",
+		os.Getpid(), runtime.GOOS, runtime.GOARCH, w.Launcher, os.Args[1:])
 
 	channel := w.ALExtensionChannel
 	if channel == "" {
@@ -667,8 +674,11 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 
 	// Handle exit
 	if msg.Method == "exit" {
-		// Shutdown call hierarchy server first
+		// Shutdown call hierarchy server first. The session summary must be
+		// emitted BEFORE the child dies — it reports that child's memory,
+		// which is unreadable once the process is gone.
 		if w.callHierarchyServer != nil {
+			w.callHierarchyServer.LogSessionSummary()
 			w.callHierarchyServer.Shutdown()
 		}
 		if w.almcpServer != nil {

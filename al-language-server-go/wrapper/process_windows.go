@@ -16,10 +16,10 @@ const (
 )
 
 var (
-	modKernel32                  = syscall.NewLazyDLL("kernel32.dll")
-	procCreateToolhelp32Snapshot = modKernel32.NewProc("CreateToolhelp32Snapshot")
-	procProcess32FirstW          = modKernel32.NewProc("Process32FirstW")
-	procProcess32NextW           = modKernel32.NewProc("Process32NextW")
+	modKernel32                    = syscall.NewLazyDLL("kernel32.dll")
+	procCreateToolhelp32Snapshot   = modKernel32.NewProc("CreateToolhelp32Snapshot")
+	procProcess32FirstW            = modKernel32.NewProc("Process32FirstW")
+	procProcess32NextW             = modKernel32.NewProc("Process32NextW")
 	procQueryFullProcessImageNameW = modKernel32.NewProc("QueryFullProcessImageNameW")
 )
 
@@ -105,4 +105,45 @@ func getParentPid(pid int) int {
 			return 0
 		}
 	}
+}
+
+// processMemoryCounters mirrors PROCESS_MEMORY_COUNTERS (psapi.h). Only the
+// working-set fields are read; the rest are present so the struct size the
+// API validates against is correct.
+type processMemoryCounters struct {
+	CB                         uint32
+	PageFaultCount             uint32
+	PeakWorkingSetSize         uintptr
+	WorkingSetSize             uintptr
+	QuotaPeakPagedPoolUsage    uintptr
+	QuotaPagedPoolUsage        uintptr
+	QuotaPeakNonPagedPoolUsage uintptr
+	QuotaNonPagedPoolUsage     uintptr
+	PagefileUsage              uintptr
+	PeakPagefileUsage          uintptr
+}
+
+var (
+	modPsapi                 = syscall.NewLazyDLL("psapi.dll")
+	procGetProcessMemoryInfo = modPsapi.NewProc("GetProcessMemoryInfo")
+)
+
+// processMemoryMB returns (currentMB, peakMB) working set for a PID.
+// ok is false when the process is gone or the query is not permitted —
+// memory reporting is diagnostics only and must never be load-bearing.
+func processMemoryMB(pid int) (current, peak uint64, ok bool) {
+	h, err := syscall.OpenProcess(processQueryLimitedInformation, false, uint32(pid))
+	if err != nil {
+		return 0, 0, false
+	}
+	defer syscall.CloseHandle(h)
+
+	var c processMemoryCounters
+	c.CB = uint32(unsafe.Sizeof(c))
+	r, _, _ := procGetProcessMemoryInfo.Call(uintptr(h), uintptr(unsafe.Pointer(&c)), uintptr(c.CB))
+	if r == 0 {
+		return 0, 0, false
+	}
+	const mb = 1024 * 1024
+	return uint64(c.WorkingSetSize) / mb, uint64(c.PeakWorkingSetSize) / mb, true
 }
