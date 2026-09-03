@@ -2,7 +2,7 @@
 # Build script for AL Language Server wrappers
 # Builds Go wrappers and al-call-hierarchy (Rust)
 #
-# Usage: ./build.sh [--skip-go] [--skip-rust]
+# Usage: ./build.sh [--skip-go] [--skip-rust] [--replace-engine]
 
 set -e
 
@@ -15,11 +15,22 @@ export PATH="$PATH:/c/Program Files/Go/bin:/c/Go/bin:$HOME/go/bin"
 
 SKIP_GO=false
 SKIP_RUST=false
+# al-call-hierarchy in the PLUGIN dirs is owned by al-sem's build-and-deploy
+# workflow: it commits CI-built, Authenticode-SIGNED binaries straight into this
+# repo, and those are what marketplace users download. A local build is neither
+# signed nor (on Linux, which drops the telemetry feature below) the same binary,
+# so copying one over the deployed artifact silently downgrades what ships.
+# During the v1.14.0 release this happened and was caught only by a manual
+# signature check. Default is therefore to leave the deployed engine alone;
+# pass --replace-engine when you deliberately want your local engine build in
+# the plugin dirs (e.g. testing an al-sem change before it is released).
+REPLACE_ENGINE=false
 
 for arg in "$@"; do
     case $arg in
         --skip-go) SKIP_GO=true ;;
         --skip-rust) SKIP_RUST=true ;;
+        --replace-engine) REPLACE_ENGINE=true ;;
     esac
 done
 
@@ -77,12 +88,20 @@ if [ "$SKIP_RUST" = false ]; then
     # exist at once (an ad-hoc plain `cargo build --release` leaves target/release/
     # behind), and a fixed preference order silently ships the STALE one — that
     # exact miss shipped a pre-version-bump alsem once. Newest mtime wins.
-    # `alsem` is the CLI half of the same cargo workspace, and `cargo build` already
-    # produces it — it was simply never shipped. Review agents call it over Bash
-    # (`alsem analyze <app> --format pr-summary`), which is why it travels with the
-    # plugin: the entrypoint git-pulls this repo on every container start, so a new
-    # binary here reaches every container without an image rebuild.
-    for b in al-call-hierarchy.exe alsem.exe; do
+    # `alsem` is the CLI half of the same cargo workspace, and `cargo build`
+    # already produces it. Review agents call it over Bash (`alsem analyze <app>
+    # --format pr-summary`), which is why it travels with the plugin: the
+    # entrypoint git-pulls this repo on every container start, so a new binary
+    # here reaches every container without an image rebuild. It is always ours
+    # to ship — the deploy bot does not copy it. The ENGINE is only ours with
+    # --replace-engine; see REPLACE_ENGINE above.
+    win_binaries="alsem.exe"
+    if [ "$REPLACE_ENGINE" = true ]; then
+        win_binaries="al-call-hierarchy.exe alsem.exe"
+    else
+        echo "  NOTE: leaving the deployed al-call-hierarchy.exe alone (--replace-engine to override)"
+    fi
+    for b in $win_binaries; do
         newest=$(ls -t "target/x86_64-pc-windows-msvc/release/$b" "target/release/$b" 2>/dev/null | head -1)
         if [ -z "$newest" ]; then
             echo "  ERROR: no built $b found in either target dir" >&2
@@ -90,7 +109,11 @@ if [ "$SKIP_RUST" = false ]; then
         fi
         cp "$newest" "$SCRIPT_DIR/al-language-server-go-windows/bin/"
     done
-    echo "  -> Copied to al-language-server-go-windows/bin/"
+    # The dev/test harness binary is always refreshed: test_lsp_go.py runs it,
+    # and a stale copy there means the suite silently tests old code.
+    dev_engine=$(ls -t target/x86_64-pc-windows-msvc/release/al-call-hierarchy.exe target/release/al-call-hierarchy.exe 2>/dev/null | head -1)
+    cp "$dev_engine" "$SCRIPT_DIR/al-language-server-go/bin/al-call-hierarchy.exe"
+    echo "  -> Copied to al-language-server-go-windows/bin/ and al-language-server-go/bin/"
 
     # Cross-compile for Linux (requires cross + Docker in Linux containers mode)
     if command -v cross &> /dev/null; then
@@ -119,7 +142,13 @@ if [ "$SKIP_RUST" = false ]; then
                 echo "  ERROR: Linux cross-compilation FAILED — Linux binaries NOT updated" >&2
                 exit 1
             fi
-            for b in al-call-hierarchy alsem; do
+            lin_binaries="alsem"
+            if [ "$REPLACE_ENGINE" = true ]; then
+                lin_binaries="al-call-hierarchy alsem"
+            else
+                echo "  NOTE: leaving the deployed al-call-hierarchy alone (--replace-engine to override)"
+            fi
+            for b in $lin_binaries; do
                 cp "target/x86_64-unknown-linux-gnu/release/$b" "$SCRIPT_DIR/al-language-server-go-linux/bin/"
                 chmod +x "$SCRIPT_DIR/al-language-server-go-linux/bin/$b"
                 # The +x bit has to be recorded in the index too: the container consumes

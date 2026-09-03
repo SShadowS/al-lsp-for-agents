@@ -547,6 +547,41 @@ def show_log(wrapper_type: str):
             print("".join(lines[-30:]))
 
 
+def build_go_wrapper() -> bool:
+    """Rebuild the Go wrapper before testing it.
+
+    The harness runs a binary at a fixed path and previously only checked that
+    the file existed, so a stale copy meant the suite silently exercised OLD
+    code while reporting green. That is not hypothetical: during the v1.14.0
+    release the dev binary reverted to an older committed copy and the tests
+    still passed, hiding the fact that they were not testing the new code at
+    all. Building here removes the whole failure mode -- an incremental Go
+    build is near-instant when nothing changed.
+
+    Uses the same flags as build.sh so the output is byte-identical to a
+    release build (verified: Go builds reproducibly with -trimpath).
+    """
+    src = os.path.join(REPO_ROOT, "al-language-server-go")
+    print("Building Go wrapper from source...", end=" ", flush=True)
+    try:
+        r = subprocess.run(
+            ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", GO_WRAPPER, "."],
+            cwd=src, capture_output=True, text=True, timeout=300,
+        )
+    except FileNotFoundError:
+        print("SKIPPED (go not on PATH)")
+        return True
+    except subprocess.TimeoutExpired:
+        print("FAILED (timeout)")
+        return False
+    if r.returncode != 0:
+        print("FAILED")
+        print(r.stderr.strip()[:2000])
+        return False
+    print("ok")
+    return True
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Test AL LSP wrappers")
@@ -556,6 +591,8 @@ def main():
                         help="Show wrapper logs after tests")
     parser.add_argument("--verbose", "-v", action="store_true",
                         help="Show detailed response data")
+    parser.add_argument("--no-build", action="store_true",
+                        help="Do not rebuild the Go wrapper first (tests whatever binary is on disk)")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -575,6 +612,11 @@ def main():
             show_log("python")
 
     if args.wrapper in ("go", "both"):
+        if not args.no_build and not build_go_wrapper():
+            print()
+            print("Aborting: the wrapper failed to build, so any result below "
+                  "would describe stale code rather than the current source.")
+            sys.exit(1)
         go_tester = LSPTester(GO_WRAPPER, "go")
         go_tester.run_all_tests()
         go_passed, go_failed = go_tester.print_results()
