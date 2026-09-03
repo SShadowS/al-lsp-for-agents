@@ -2,6 +2,15 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.14.0] - 2026-09-03
+
+### Fixed
+- **Huge memory use in multi-root workspaces** -- a 33-root workspace drove the bundled `al-call-hierarchy` engine to a **17 GB peak / 4.7 GB resident with nothing opened**. Every configured root was analysed in full the moment the workspace loaded, and each root independently retains its whole dependency closure (Base Application and friends) with no sharing between roots, so 33 near-identical copies of the same data were held at once. Roots are now analysed on first use and cached, so you pay for the roots you actually work in. Measured with 8 roots and nothing opened: **3643 MB to 26 MB**, and the burst of unsolicited diagnostics on startup is gone entirely. Delivered by [al-sem v1.2.0](https://github.com/SShadowS/al-sem/releases/tag/v1.2.0).
+- **Code-quality diagnostics are no longer computed when they are switched off.** `alLspForAgents.enableCodeQualityDiagnostics` is off by default, and the extension already discarded those diagnostics on arrival -- but the engine still produced them, which meant a full analysis of every workspace root you opened, for output nothing consumed. The extension now tells the engine to skip the work.
+
+### Changed
+- Wrapper logs are far more useful and much smaller. Repeated notification forwarding is aggregated instead of one line each (in the report that prompted this, 1848 of 2081 log lines were a single repeated message), the al-sem child's memory is now recorded at each snapshot build and at shutdown, and a one-line session header records pid, platform, launcher and flags. Logs live in `%TEMP%` as `al-lsp-wrapper-go-<pid>.log`.
+
 ## [1.13.1] - 2026-08-24
 
 ### Changed
