@@ -23,6 +23,10 @@ type CallHierarchyServer struct {
 	initialized bool
 	rootURI     string
 
+	// NoDiagnostics forwards --no-diagnostics to al-sem so it skips
+	// code-quality analysis entirely. Set from the wrapper's own flag.
+	NoDiagnostics bool
+
 	mu         sync.Mutex
 	pendingMu  sync.Mutex
 	pendingReqs map[int]chan *Message
@@ -108,7 +112,14 @@ func (s *CallHierarchyServer) Start(executable string) error {
 
 	s.log("Starting al-call-hierarchy: %s", executable)
 
-	s.cmd = exec.Command(executable, "--no-watcher")
+	args := []string{"--no-watcher"}
+	if s.NoDiagnostics {
+		// The client discards code-quality diagnostics, so computing them
+		// would be a full analysis of every opened root for nothing.
+		args = append(args, "--no-diagnostics")
+	}
+	s.log("Starting al-call-hierarchy with args: %v", args)
+	s.cmd = exec.Command(executable, args...)
 
 	var err error
 	s.stdin, err = s.cmd.StdinPipe()

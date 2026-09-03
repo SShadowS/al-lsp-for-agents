@@ -88,6 +88,17 @@ export async function activate(context: vscode.ExtensionContext) {
   if (alExtensionPath) {
     args.push("--al-extension-path", alExtensionPath);
   }
+  // handleDiagnostics below drops code-quality diagnostics when this setting
+  // is off (the default), so tell the engine not to compute them at all.
+  // Without this the engine analyses every opened workspace root in full to
+  // produce findings this client immediately discards.
+  if (
+    !vscode.workspace
+      .getConfiguration("alLspForAgents")
+      .get<boolean>("enableCodeQualityDiagnostics", false)
+  ) {
+    args.push("--no-diagnostics");
+  }
 
   const serverOptions: ServerOptions = {
     command: serverPath,

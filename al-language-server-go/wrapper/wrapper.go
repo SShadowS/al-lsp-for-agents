@@ -56,6 +56,12 @@ type ALLSPWrapper struct {
 	// Set via --launcher flag.
 	Launcher string
 
+	// NoDiagnostics forwards --no-diagnostics to al-sem, telling it not to
+	// compute code-quality diagnostics at all. The VS Code client filters
+	// them away client-side unless the user opts in, and computing them
+	// costs a full analysis of every workspace root that gets opened.
+	NoDiagnostics bool
+
 	// AL LSP process
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -1427,6 +1433,7 @@ func (w *ALLSPWrapper) PreviewCache() *previewCache {
 // startCallHierarchyServer starts the al-call-hierarchy server
 func (w *ALLSPWrapper) startCallHierarchyServer() {
 	w.callHierarchyServer = NewCallHierarchyServer(w.Log)
+	w.callHierarchyServer.NoDiagnostics = w.NoDiagnostics
 	w.callHierarchyServer.SetClientWriter(w.clientWriter)
 	w.callHierarchyServer.SetSanitizer(func(msg *Message) {
 		if n, orig, norm := SanitizeOutboundMessage(msg); n > 0 {
