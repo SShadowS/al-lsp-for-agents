@@ -2,6 +2,24 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.15.0] - 2026-09-10
+
+### Fixed
+- **AL 18 support, now that AL 18 is the stable channel.** The AL extension went framework-dependent in 18.x: the package ships portable .NET code plus a Windows-only launcher, and **no Linux or macOS binary at all**. That broke the wrapper two ways -- on Linux and macOS there was nothing to start, and on Windows the launcher only runs when .NET 10 is installed machine-wide, so a machine could run the AL extension happily (it quietly fetches its own private copy of .NET that only VS Code can see) while the wrapper failed with "You must install .NET to run this application."
+
+  The wrapper now runs the AL Language Server through `dotnet` when it cannot use the native launcher, finding a runtime either machine-wide or among the ones VS Code's .NET Install Tool has already downloaded -- the same runtime the AL extension itself uses. Verified end to end on Linux against stable AL 18, where the package contains no Linux binary whatsoever. The same applies to the bundled `almcp` behind `bclsp_symbolRelations` and `bclsp_inspectPage`.
+
+  If nothing suitable exists, the error now names the runtime to install instead of failing obscurely.
+
+  **Setups that already work are untouched.** The native launcher is still preferred whenever it exists and can actually run, so AL 17.x and any Windows machine with .NET 10 installed behave exactly as before.
+
+  This supersedes the note in 1.13.0 that "the current stable 17.x is unaffected" -- true when written, but AL 18 has since become the stable release.
+
+- **The newest installed AL extension is no longer chosen blindly.** Selection went by version number alone, so with AL 18 installed next to a working 17.x the wrapper picked 18.x and failed at startup while a perfectly good extension sat beside it. It now picks the newest extension it can actually launch.
+
+### Changed
+- No engine change: this release bundles [al-sem v1.2.0](https://github.com/SShadowS/al-sem/releases/tag/v1.2.0), the same as 1.14.0.
+
 ## [1.14.0] - 2026-09-03
 
 ### Fixed
