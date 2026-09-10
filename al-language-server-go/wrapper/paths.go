@@ -14,10 +14,10 @@ import (
 
 // alExtensionVersion holds an extension path and its parsed version
 type alExtensionVersion struct {
-	path    string
-	major   int
-	minor   int
-	patch   int
+	path  string
+	major int
+	minor int
+	patch int
 }
 
 // vsCodeExtensionDirs lists all known VS Code variant extension directories (relative to home)
@@ -92,6 +92,19 @@ func findALExtensionInHome(home string) (string, error) {
 		return alExtensions[i].patch > alExtensions[j].patch
 	})
 
+	// Prefer the newest extension we can actually LAUNCH, not merely the newest.
+	//
+	// From AL 18 the newest installed extension can be unlaunchable on this
+	// machine: the package ships no native binary outside Windows, and on
+	// Windows its apphost needs a machine-wide .NET 10 that may not be there.
+	// Picking strictly by version then fails startup while a perfectly good
+	// older extension sits beside it. Falling back to the newest when nothing
+	// resolves keeps the previous behavior (and its clearer error) intact.
+	for _, ext := range alExtensions {
+		if _, _, err := ResolveALHostLaunch(ext.path); err == nil {
+			return ext.path, nil
+		}
+	}
 	return alExtensions[0].path, nil
 }
 
@@ -109,11 +122,15 @@ func legacyBinDir() string {
 }
 
 // resolveExtensionBinary locates an extension-bundled binary across the two
-// bin layouts the AL extension has shipped: platform-specific VSIXes from
-// 18.0.2668733 (prerelease) on put binaries directly in bin/, while older
-// universal VSIXes used bin/win32|linux|darwin. Returns the first candidate
-// that exists on disk; when neither does, returns the legacy path so callers'
-// "not found" errors match prior behavior.
+// bin layouts the AL extension has shipped. It is ONE universal VSIX in both
+// cases: up to 18.0.25x it carried per-platform binaries under
+// bin/win32|linux|darwin; from 18.0.2668733 it went framework-dependent and
+// puts portable IL plus a Windows-only apphost directly in bin/. Returns the
+// first candidate that exists on disk; when neither does, returns the legacy
+// path so callers' "not found" errors match prior behavior.
+//
+// For LAUNCHING, prefer ResolveALHostLaunch/ResolveALMcpLaunch: outside
+// Windows the newer layout has no native binary for this to find at all.
 func resolveExtensionBinary(extensionPath, name string) string {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -143,8 +160,9 @@ func GetALMcpExecutable(extensionPath string) string {
 // URL/URI code can handle. Returns the input unchanged if no prefix is present.
 //
 // Examples:
-//   \\?\C:\foo            -> C:\foo
-//   \\?\UNC\srv\share\f   -> \\srv\share\f
+//
+//	\\?\C:\foo            -> C:\foo
+//	\\?\UNC\srv\share\f   -> \\srv\share\f
 func stripWindowsNamespacePrefix(p string) string {
 	// UNC form first (longer prefix wins).
 	if len(p) >= 8 {

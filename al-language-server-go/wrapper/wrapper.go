@@ -189,18 +189,22 @@ func (w *ALLSPWrapper) Run() error {
 		w.Log("almcp backend not found (nuget al tool absent and no bundled almcp); al/symbolRelations and al/inspectPage will error until available")
 	}
 
-	// Get executable path
-	executable := GetALLSPExecutable(extensionPath)
-	w.Log("AL LSP executable: %s", executable)
-
-	// Check executable exists
-	if _, err := os.Stat(executable); os.IsNotExist(err) {
-		w.Log("AL LSP executable not found: %s", executable)
-		return fmt.Errorf("AL LSP executable not found: %s", executable)
+	// Resolve how to launch the AL Language Server. From AL 18 the extension
+	// ships portable IL plus a Windows-only apphost, so this may be either the
+	// native binary or `dotnet <dll>` — see dotnet_runtime.go.
+	executable, execArgs, err := ResolveALHostLaunch(extensionPath)
+	if err != nil {
+		w.Log("Cannot launch the AL Language Server: %v", err)
+		return err
+	}
+	if len(execArgs) > 0 {
+		w.Log("AL LSP launch: %s %v (portable build, resolved .NET runtime)", executable, execArgs)
+	} else {
+		w.Log("AL LSP executable: %s", executable)
 	}
 
 	// Start AL LSP process
-	w.cmd = exec.Command(executable)
+	w.cmd = exec.Command(executable, execArgs...)
 	w.cmd.Dir = extensionPath
 
 	w.stdin, err = w.cmd.StdinPipe()

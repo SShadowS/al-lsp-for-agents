@@ -16,6 +16,11 @@ import (
 type mcpBackend struct {
 	kind    string // "nuget" | "bundled"
 	command string // executable path
+	// prefixArgs precede the backend's own flags. Non-empty only when the
+	// bundled almcp is portable IL that has to be launched as
+	// `dotnet <almcp.dll>` — AL 18 ships no native almcp outside Windows, and
+	// on Windows its apphost needs a machine-wide .NET 10. See dotnet_runtime.go.
+	prefixArgs []string
 }
 
 // args builds the spawn arguments for the given project + package cache.
@@ -38,7 +43,7 @@ func (b mcpBackend) args(projectDir, pkgCache string) []string {
 		args = append(args, cacheFlags...)
 		return append(args, "--transport", "stdio", "--nolog")
 	}
-	args := []string{"--transport", "stdio", "--projects", projectDir}
+	args := append(append([]string{}, b.prefixArgs...), "--transport", "stdio", "--projects", projectDir)
 	args = append(args, cacheFlags...)
 	return append(args, "--nolog")
 }
@@ -83,9 +88,9 @@ func discoverMcpBackend(extensionPath string) (mcpBackend, bool) {
 	if al := findNugetALTool(); al != "" {
 		return mcpBackend{kind: "nuget", command: al}, true
 	}
-	bundled := GetALMcpExecutable(extensionPath)
-	if _, err := os.Stat(bundled); err == nil {
-		return mcpBackend{kind: "bundled", command: bundled}, true
+	// The bundled almcp may be a native apphost or portable IL needing `dotnet`.
+	if cmd, args, err := ResolveALMcpLaunch(extensionPath); err == nil {
+		return mcpBackend{kind: "bundled", command: cmd, prefixArgs: args}, true
 	}
 	return mcpBackend{}, false
 }

@@ -554,3 +554,68 @@ func TestGetALMcpExecutable_FlatBinLayout(t *testing.T) {
 		t.Fatalf("GetALMcpExecutable = %q, want flat-layout path %q", got, flat)
 	}
 }
+
+// installExtension creates an AL extension dir. `withBinary` controls whether
+// it has anything the wrapper could actually launch.
+func installExtension(t *testing.T, home, version string, withBinary bool) string {
+	t.Helper()
+	ext := createTestExtension(t, home, ".vscode", version)
+	if withBinary {
+		dir := filepath.Join(ext, "bin", legacyBinDir())
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		touchFile(t, filepath.Join(dir, hostExecutableName()))
+	}
+	return ext
+}
+
+func TestFindALExtension_SkipsAVersionItCannotLaunch(t *testing.T) {
+	// The real shape this guards: AL 18 ships no native binary outside Windows
+	// (and needs machine-wide .NET 10 on Windows), so the newest installed
+	// extension can be unlaunchable while an older one works fine. Picking
+	// strictly by version number then fails startup with a working extension
+	// sitting right there.
+	home := t.TempDir()
+	installExtension(t, home, "18.0.2732683", false)
+	working := installExtension(t, home, "17.0.2273547", true)
+
+	got, err := findALExtensionInHome(home)
+	if err != nil {
+		t.Fatalf("findALExtensionInHome: %v", err)
+	}
+	if got != working {
+		t.Fatalf("expected the launchable 17.x extension %q, got %q", working, got)
+	}
+}
+
+func TestFindALExtension_PrefersNewestWhenBothLaunch(t *testing.T) {
+	home := t.TempDir()
+	newest := installExtension(t, home, "18.0.2732683", true)
+	installExtension(t, home, "17.0.2273547", true)
+
+	got, err := findALExtensionInHome(home)
+	if err != nil {
+		t.Fatalf("findALExtensionInHome: %v", err)
+	}
+	if got != newest {
+		t.Fatalf("expected the newest launchable extension %q, got %q", newest, got)
+	}
+}
+
+func TestFindALExtension_FallsBackToNewestWhenNoneLaunch(t *testing.T) {
+	// Preserves the previous behavior (and the existing tests above, whose
+	// fixtures contain no binaries at all): when nothing is launchable the
+	// caller should still get the newest, and fail with its own clear error.
+	home := t.TempDir()
+	newest := installExtension(t, home, "18.0.2732683", false)
+	installExtension(t, home, "17.0.2273547", false)
+
+	got, err := findALExtensionInHome(home)
+	if err != nil {
+		t.Fatalf("findALExtensionInHome: %v", err)
+	}
+	if got != newest {
+		t.Fatalf("expected fallback to newest %q, got %q", newest, got)
+	}
+}
