@@ -1,0 +1,12 @@
+{
+  "id": "5a0a0a0a-0000-4000-8000-00000000000a",
+  "name": "Fixture A",
+  "publisher": "Fixture",
+  "version": "30.0.0.0",
+  "runtime": "15.0",
+  "idRanges": [{ "from": 50100, "to": 50199 }],
+  "dependencies": [
+    { "id": "5b0b0b0b-0000-4000-8000-00000000000b", "name": "Fixture B", "publisher": "Fixture", "version": "30.0.0.0" },
+    { "id": "5c0c0c0c-0000-4000-8000-00000000000c", "name": "Fixture C", "publisher": "Fixture", "version": "29.0.0.0" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "5c0c0c0c-0000-4000-8000-00000000000c",
+  "name": "Fixture C",
+  "publisher": "Fixture",
+  "version": "30.0.0.0",
+  "runtime": "15.0",
+  "idRanges": [{ "from": 50300, "to": 50399 }],
+  "dependencies": []
+}

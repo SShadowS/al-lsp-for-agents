@@ -104,6 +104,10 @@ type ALLSPWrapper struct {
 	// almcp MCP server (backs al/symbolRelations and al/inspectPage)
 	almcpServer *ALMcpServer
 
+	// sourceIndex resolves dependencies from source projects under
+	// AL_LSP_SOURCE_ROOTS. nil when unset, and then nothing below changes.
+	sourceIndex *SourceIndex
+
 	// Preview cache: materializes .al from .app archives to make
 	// dependency objects addressable via on-disk file:// URIs (so
 	// Claude Code's filePath-existence check on the LSP tool surface
@@ -156,6 +160,10 @@ func (w *ALLSPWrapper) Run() error {
 	// whether --no-diagnostics was actually in effect.
 	w.Log("session: pid=%d os=%s/%s launcher=%q flags=%v",
 		os.Getpid(), runtime.GOOS, runtime.GOARCH, w.Launcher, os.Args[1:])
+
+	if roots := sourceRootsFromEnv(); roots != nil {
+		w.sourceIndex = BuildSourceIndex(roots, w.Log)
+	}
 
 	channel := w.ALExtensionChannel
 	if channel == "" {
@@ -583,11 +591,22 @@ func (w *ALLSPWrapper) handleServerRequest(msg *Message) {
 
 			w.Log("Sending workspace/didChangeConfiguration for: %s", wsPath)
 			manifest := w.GetManifest(wsPath)
-			settings := NewWorkspaceSettings(wsPath, manifest)
+			settings := w.workspaceSettings(wsPath, manifest)
 			configParams := DidChangeConfigurationParams{Settings: settings}
 			if err := w.SendNotificationToLSP("workspace/didChangeConfiguration", configParams); err != nil {
 				w.Log("Error sending didChangeConfiguration: %v", err)
 			}
+		}
+
+	case "al/activeProjectLoaded":
+		// Like the AL extension's loadProjectReferences: once the active
+		// project is loaded, configure each source project it references.
+		resp := &Message{JSONRPC: "2.0", ID: msg.ID, Result: json.RawMessage("null")}
+		if err := w.writeToLSP(resp); err != nil {
+			w.Log("Error responding to %s: %v", msg.Method, err)
+		}
+		if w.sourceIndex != nil {
+			w.sendReferenceConfigs(msg.Params)
 		}
 
 	case "window/workDoneProgress/create":
@@ -1283,7 +1302,7 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 		manifest := w.GetManifest(normalizedRoot)
 
 		// Send workspace configuration
-		settings := NewWorkspaceSettings(normalizedRoot, manifest)
+		settings := w.workspaceSettings(normalizedRoot, manifest)
 		configParams := DidChangeConfigurationParams{Settings: settings}
 		if err := w.SendNotificationToLSP("workspace/didChangeConfiguration", configParams); err != nil {
 			w.Log("Failed to send workspace configuration: %v", err)
@@ -1320,6 +1339,7 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 		manifest := w.GetManifest(normalizedRoot)
 		folderIndex := w.getWorkspaceFolderIndex(normalizedRoot)
 		activeParams := NewActiveWorkspaceParams(normalizedRoot, manifest, folderIndex)
+		activeParams.Settings = w.workspaceSettings(normalizedRoot, manifest)
 		if _, err := w.SendRequestToLSPWithTimeout("al/setActiveWorkspace", activeParams, 60*time.Second); err != nil {
 			w.Log("Failed to set active workspace: %v", err)
 		}

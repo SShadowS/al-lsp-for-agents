@@ -1,6 +1,7 @@
 package wrapper
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -91,6 +92,8 @@ func ParseAppManifest(appJsonPath string) *AppManifest {
 	if err != nil {
 		return nil
 	}
+
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf")) // UTF-8 BOM breaks json.Unmarshal
 
 	var manifest AppManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {

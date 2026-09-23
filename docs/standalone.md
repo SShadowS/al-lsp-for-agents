@@ -34,6 +34,14 @@ AL_EXTENSION_PATH=/path/to/extension ./al-lsp-wrapper
 # Path-list separated (":" on Linux, ";" on Windows); appended after the
 # project's own and ancestor .alpackages. Missing folders are skipped.
 AL_LSP_PACKAGE_CACHE=/cache/al-symbols/28 ./al-lsp-wrapper
+
+# Resolve dependencies from source: folders scanned (up to 6 levels deep, no
+# symlinks, no .alpackages) for AL projects. A dependency that one of them
+# satisfies (same app id, version >= required) is loaded from source, the
+# way VS Code handles project references in a multi-root workspace. Source
+# wins over a .app of the same app. Every referenced project is compiled, so
+# memory grows with the closure.
+AL_LSP_SOURCE_ROOTS=/workspace/session ./al-lsp-wrapper
 ```
 
 The wrapper speaks standard LSP over stdin/stdout. It:
