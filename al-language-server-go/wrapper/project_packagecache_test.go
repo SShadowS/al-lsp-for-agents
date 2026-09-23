@@ -112,3 +112,52 @@ func TestDiscoverPackageCachePaths_DedupesSameDirectory(t *testing.T) {
 		seen[k] = true
 	}
 }
+
+// TestDiscoverPackageCachePaths_EnvCacheAppended verifies AL_LSP_PACKAGE_CACHE:
+// existing directories are appended after the discovered ones, in order;
+// entries that are not directories are skipped.
+func TestDiscoverPackageCachePaths_EnvCacheAppended(t *testing.T) {
+	root := t.TempDir()
+	cloud := filepath.Join(root, "app")
+	symA := filepath.Join(root, "symbols", "28")
+	symB := filepath.Join(root, "continia")
+	for _, d := range []string{cloud, symA, symB} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	missing := filepath.Join(root, "does-not-exist")
+	t.Setenv(PackageCacheEnvVar, strings.Join([]string{symA, missing, "", symB}, string(os.PathListSeparator)))
+
+	paths := DiscoverPackageCachePaths(cloud)
+	want := []string{"./.alpackages", symA, symB}
+	if len(paths) != len(want) {
+		t.Fatalf("expected %v, got %v", want, paths)
+	}
+	for i := range want {
+		if !strings.EqualFold(filepath.Clean(paths[i]), filepath.Clean(want[i])) {
+			t.Errorf("entry %d: expected %s, got %s (all: %v)", i, want[i], paths[i], paths)
+		}
+	}
+}
+
+// TestDiscoverPackageCachePaths_EnvCacheDeduped verifies an env entry that
+// duplicates a discovered folder is not listed twice.
+func TestDiscoverPackageCachePaths_EnvCacheDeduped(t *testing.T) {
+	root := t.TempDir()
+	parent := filepath.Join(root, "repo")
+	cloud := filepath.Join(parent, "Cloud")
+	parentPkg := filepath.Join(parent, ".alpackages")
+	if err := os.MkdirAll(parentPkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cloud, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(PackageCacheEnvVar, parentPkg+string(os.PathListSeparator)+filepath.Join(cloud, ".alpackages"))
+
+	paths := DiscoverPackageCachePaths(cloud)
+	if len(paths) != 2 {
+		t.Errorf("expected own + ancestor only, got %v", paths)
+	}
+}

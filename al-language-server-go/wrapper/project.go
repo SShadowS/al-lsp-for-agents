@@ -184,6 +184,10 @@ func NewWorkspaceSettings(projectRoot string, manifest *AppManifest) *WorkspaceS
 	}
 }
 
+// PackageCacheEnvVar names extra package cache folders (os.PathListSeparator
+// separated) that DiscoverPackageCachePaths appends to every project.
+const PackageCacheEnvVar = "AL_LSP_PACKAGE_CACHE"
+
 // DiscoverPackageCachePaths returns the list of .alpackages folders the AL
 // Language Server should search for dependency .app files. The first entry is
 // always the project's own `.alpackages` (relative path, matches VS Code AL
@@ -224,6 +228,23 @@ func DiscoverPackageCachePaths(projectRoot string) []string {
 		}
 
 		current = parent
+	}
+
+	// Extra caches from the environment (e.g. a shared symbol cache in a CI
+	// container that has no .alpackages). Non-directories are skipped.
+	for _, p := range filepath.SplitList(os.Getenv(PackageCacheEnvVar)) {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if a, err := filepath.Abs(p); err == nil {
+			p = a
+		}
+		key := strings.ToLower(p)
+		if info, err := os.Stat(p); err == nil && info.IsDir() && !seen[key] {
+			paths = append(paths, p)
+			seen[key] = true
+		}
 	}
 
 	return paths

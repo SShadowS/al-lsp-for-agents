@@ -29,6 +29,11 @@ Run the wrapper over stdio:
 
 # Or via environment variable
 AL_EXTENSION_PATH=/path/to/extension ./al-lsp-wrapper
+
+# Extra symbol package folders (.app files), e.g. a shared cache in CI.
+# Path-list separated (":" on Linux, ";" on Windows); appended after the
+# project's own and ancestor .alpackages. Missing folders are skipped.
+AL_LSP_PACKAGE_CACHE=/cache/al-symbols/28 ./al-lsp-wrapper
 ```
 
 The wrapper speaks standard LSP over stdin/stdout. It:
