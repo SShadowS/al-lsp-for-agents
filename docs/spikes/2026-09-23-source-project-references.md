@@ -179,3 +179,22 @@ The wrapper now reads `AL_LSP_PACKAGE_CACHE`, which appends extra
 The cache fixes the baseline symbolSearch hang. With source refs, the hang comes
 back. The likely cause is Core source lacking Continia System Application, which
 ContiniaBase provides in the real layout. That needs a retest there before phase 3.
+
+## Phase 3 findings (built as `AL_LSP_SOURCE_ROOTS`)
+
+- **Precedence:** with Continia Core as both a source project and a `.app` in the
+  package cache, definition goes to the source. Stale packages don't shadow a
+  PR's source.
+- **Workspace folders are not needed.** Only the active project as a workspace
+  folder, plus the closure settings, gives the same resolution, references and
+  diagnostics. `initialize` stays as it is.
+- **Symbol search hang is Core-specific, not caused by source refs.** Core/Cloud
+  alone (no refs, full symbol cache incl. Continia System Application) hangs both
+  `workspace/symbol` and `al/symbolSearch`: ~20 s of CPU, then idle with no
+  response and nothing in the host log. DeliveryNetwork alone answers in
+  0.2 s / 10 s. Something in Core's source trips a silent failure in the MS
+  SymbolSearchService. Not bisected yet. Consequence: any closure containing
+  Core loses workspaceSymbol (the wrapper's 30 s timeout turns it into an error).
+- Unrelated bug found on the way: on Windows al-sem publishes diagnostics under a
+  URI with lower-cased directories, and `DiagnosticMerger` keys by the exact
+  string, so AL LS and al-sem diagnostics for one file don't merge.
