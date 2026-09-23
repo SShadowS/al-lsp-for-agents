@@ -62,8 +62,8 @@ The `.lsp.json` must reference the correct wrapper binary for the platform:
 ## Logging
 
 Logs are written to:
-- Windows: `%TEMP%\al-lsp-wrapper-go.log`
-- Unix: `/tmp/al-lsp-wrapper-go.log`
+- Windows: `%TEMP%\al-lsp-wrapper-go-<pid>.log`
+- Unix: `$TMPDIR/al-lsp-wrapper-go-<pid>.log` (`/tmp` when `TMPDIR` is unset)
 
 ## Architecture
 

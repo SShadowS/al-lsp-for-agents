@@ -329,23 +329,10 @@ func GetLogPath() string {
 	return filepath.Join(GetLogDir(), fmt.Sprintf("al-lsp-wrapper-go-%d.log", os.Getpid()))
 }
 
-// GetLogDir returns the directory for log files
+// GetLogDir returns the directory for log files: the OS temp dir (%TEMP% on
+// Windows, $TMPDIR or /tmp elsewhere), the same place as the lock/pid file.
 func GetLogDir() string {
-	var tempDir string
-
-	if runtime.GOOS == "windows" {
-		tempDir = os.Getenv("TEMP")
-		if tempDir == "" {
-			tempDir = os.Getenv("TMP")
-		}
-		if tempDir == "" {
-			tempDir = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local", "Temp")
-		}
-	} else {
-		tempDir = "/tmp"
-	}
-
-	return tempDir
+	return os.TempDir()
 }
 
 // GetLogPattern returns the glob pattern for finding log files

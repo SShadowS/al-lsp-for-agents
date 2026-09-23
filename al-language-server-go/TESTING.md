@@ -54,5 +54,5 @@ Successful run:
 ## Logs
 
 Check wrapper logs for debugging:
-- Windows: `%TEMP%\al-lsp-wrapper-go.log`
-- Unix: `/tmp/al-lsp-wrapper-go.log`
+- Windows: `%TEMP%\al-lsp-wrapper-go-<pid>.log`
+- Unix: `$TMPDIR/al-lsp-wrapper-go-<pid>.log` (`/tmp` when `TMPDIR` is unset)
