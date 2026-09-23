@@ -2,9 +2,29 @@ package wrapper
 
 import (
 	"encoding/json"
+	"net/url"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
 )
+
+// caseInsensitivePaths is true where file paths compare case-insensitively.
+// al-call-hierarchy case-folds paths on Windows, so its URIs differ in case
+// from the AL LS URIs for the same file.
+var caseInsensitivePaths = runtime.GOOS == "windows"
+
+// uriKey is the merge key for a URI: percent-decoded, and case-folded where
+// paths are case-insensitive.
+func uriKey(uri string) string {
+	if d, err := url.PathUnescape(uri); err == nil {
+		uri = d
+	}
+	if caseInsensitivePaths {
+		uri = strings.ToLower(uri)
+	}
+	return uri
+}
 
 // Backend identifiers for diagnostic sources funnelled to the client.
 const (
@@ -30,13 +50,20 @@ const (
 // own diagnostics (empty array) only removes its own contribution.
 type DiagnosticMerger struct {
 	mu sync.Mutex
-	// uri -> backend -> that backend's last reported diagnostics (raw JSON).
+	// uriKey(uri) -> backend -> that backend's last reported diagnostics (raw JSON).
 	byURI map[string]map[string][]json.RawMessage
+	// uriKey(uri) -> the URI the client (didOpen) or the AL LS uses for that
+	// file. Other backends' publishes go out under it, so the client sees one
+	// URI per file.
+	preferred map[string]string
 }
 
 // NewDiagnosticMerger returns an empty merger.
 func NewDiagnosticMerger() *DiagnosticMerger {
-	return &DiagnosticMerger{byURI: make(map[string]map[string][]json.RawMessage)}
+	return &DiagnosticMerger{
+		byURI:     make(map[string]map[string][]json.RawMessage),
+		preferred: make(map[string]string),
+	}
 }
 
 // Merge records backend's current diagnostics for uri and returns the union of
@@ -48,10 +75,11 @@ func (m *DiagnosticMerger) Merge(backend, uri string, diags []json.RawMessage) [
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	perBackend := m.byURI[uri]
+	key := uriKey(uri)
+	perBackend := m.byURI[key]
 	if perBackend == nil {
 		perBackend = make(map[string][]json.RawMessage)
-		m.byURI[uri] = perBackend
+		m.byURI[key] = perBackend
 	}
 	if len(diags) == 0 {
 		delete(perBackend, backend)
@@ -91,8 +119,17 @@ func (m *DiagnosticMerger) MergePublishDiagnostics(backend string, msg *Message)
 
 	merged := m.Merge(backend, pd.URI, pd.Diagnostics)
 
+	uri := pd.URI
+	m.mu.Lock()
+	if backend == diagBackendALLS {
+		m.preferred[uriKey(uri)] = uri
+	} else if p, ok := m.preferred[uriKey(uri)]; ok {
+		uri = p
+	}
+	m.mu.Unlock()
+
 	out := map[string]interface{}{
-		"uri":         pd.URI,
+		"uri":         uri,
 		"diagnostics": merged,
 	}
 	if pd.Version != nil {
@@ -104,4 +141,12 @@ func (m *DiagnosticMerger) MergePublishDiagnostics(backend string, msg *Message)
 	}
 	msg.Params = rewritten
 	return true
+}
+
+// PreferURI records the client's URI for a file (from didOpen), so diagnostics
+// from any backend are published under it.
+func (m *DiagnosticMerger) PreferURI(uri string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.preferred[uriKey(uri)] = uri
 }

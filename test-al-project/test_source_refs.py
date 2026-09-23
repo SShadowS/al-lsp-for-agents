@@ -48,6 +48,7 @@ class Wrapper:
         self.pending = {}
         self.lock = threading.Lock()
         self.diags = {}
+        self.uris = set()  # every raw URI diagnostics were published under
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self):
@@ -70,9 +71,8 @@ class Wrapper:
                     slot.put(msg)
             elif msg.get("method") == "textDocument/publishDiagnostics":
                 p = msg["params"]
-                # Keyed by exact URI: al-sem publishes a differently-cased URI on
-                # Windows, and only the AL LS form carries the compiler errors.
-                self.diags[p["uri"].replace("%3A", ":").replace("%3a", ":")] = p["diagnostics"]
+                self.uris.add(p["uri"])
+                self.diags[p["uri"]] = p["diagnostics"]
             elif "id" in msg:  # server -> client request
                 self.send({"jsonrpc": "2.0", "id": msg["id"], "result": None})
 
@@ -148,14 +148,14 @@ def run(exe, source_roots):
         while time.time() < deadline and not w.diags.get(key):
             time.sleep(1)
         out["diagnostics"] = [d.get("message", "") for d in w.diags.get(key, []) if d.get("severity") == 1]
+        out["uris_for_file"] = sorted(u for u in w.uris if u.lower().replace("%3a", ":") == key.lower())
     finally:
         w.stop()
     return out
 
 
 def wrapper_log(pid):
-    tmp = os.environ.get("TEMP") if sys.platform == "win32" else "/tmp"
-    p = Path(tmp or tempfile.gettempdir()) / f"al-lsp-wrapper-go-{pid}.log"
+    p = Path(tempfile.gettempdir()) / f"al-lsp-wrapper-go-{pid}.log"
     return p.read_text(encoding="utf-8", errors="replace") if p.exists() else ""
 
 
@@ -182,6 +182,7 @@ def main():
     check("diagnostics published for A", bool(on["diagnostics"]), on["diagnostics"])
     check("only the missing codeunit is reported",
           on["diagnostics"] and all("Does Not Exist" in m for m in on["diagnostics"]), on["diagnostics"])
+    check("diagnostics for A published under one URI", on["uris_for_file"] == [A_FILE.as_uri()], on["uris_for_file"])
     log = wrapper_log(on["pid"])
     n = log.count("source refs: configuring")
     check("one reference config per (reference, parent) pair", n == 3, f"{n} configs logged (want 3)")

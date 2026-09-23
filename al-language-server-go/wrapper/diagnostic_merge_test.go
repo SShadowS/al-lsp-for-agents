@@ -158,3 +158,79 @@ func rawSlice(diags []json.RawMessage) []string {
 	}
 	return out
 }
+
+func publishMsg(t *testing.T, uri, message string) *Message {
+	t.Helper()
+	params, _ := json.Marshal(map[string]interface{}{
+		"uri":         uri,
+		"diagnostics": []interface{}{map[string]interface{}{"message": message}},
+	})
+	return &Message{JSONRPC: "2.0", Method: "textDocument/publishDiagnostics", Params: params}
+}
+
+func decodePublish(t *testing.T, msg *Message) (string, int) {
+	t.Helper()
+	var out struct {
+		URI         string            `json:"uri"`
+		Diagnostics []json.RawMessage `json:"diagnostics"`
+	}
+	if err := json.Unmarshal(msg.Params, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out.URI, len(out.Diagnostics)
+}
+
+// TestDiagnosticMerger_CaseFoldedURIsMerge covers Windows: al-call-hierarchy
+// publishes under a case-folded URI (file:///u:/git/a/src/X.al) while the AL LS
+// uses the real casing. They are the same file and must merge, and the client
+// must see one URI: the AL LS form.
+func TestDiagnosticMerger_CaseFoldedURIsMerge(t *testing.T) {
+	old := caseInsensitivePaths
+	caseInsensitivePaths = true
+	defer func() { caseInsensitivePaths = old }()
+
+	const alURI = "file:///U:/Git/Repo/A/src/ATop.Codeunit.al"
+	const chURI = "file:///u%3A/git/repo/a/src/ATop.Codeunit.al"
+	m := NewDiagnosticMerger()
+
+	m.MergePublishDiagnostics(diagBackendALLS, publishMsg(t, alURI, "error"))
+	ch := publishMsg(t, chURI, "unused")
+	m.MergePublishDiagnostics(diagBackendCallHierarchy, ch)
+
+	if uri, n := decodePublish(t, ch); uri != alURI || n != 2 {
+		t.Errorf("call-hierarchy publish = (%q, %d), want (%q, 2)", uri, n, alURI)
+	}
+}
+
+// TestDiagnosticMerger_CaseSensitiveKeepsDistinct: on case-sensitive
+// filesystems two URIs differing only in case are different files.
+func TestDiagnosticMerger_CaseSensitiveKeepsDistinct(t *testing.T) {
+	old := caseInsensitivePaths
+	caseInsensitivePaths = false
+	defer func() { caseInsensitivePaths = old }()
+
+	m := NewDiagnosticMerger()
+	m.MergePublishDiagnostics(diagBackendALLS, publishMsg(t, "file:///src/A.al", "error"))
+	ch := publishMsg(t, "file:///src/a.al", "unused")
+	m.MergePublishDiagnostics(diagBackendCallHierarchy, ch)
+
+	if uri, n := decodePublish(t, ch); uri != "file:///src/a.al" || n != 1 {
+		t.Errorf("got (%q, %d), want (file:///src/a.al, 1)", uri, n)
+	}
+}
+
+// TestDiagnosticMerger_ClientURIPreferred: when al-call-hierarchy publishes
+// before the AL LS, the client's didOpen URI is used.
+func TestDiagnosticMerger_ClientURIPreferred(t *testing.T) {
+	old := caseInsensitivePaths
+	caseInsensitivePaths = true
+	defer func() { caseInsensitivePaths = old }()
+
+	m := NewDiagnosticMerger()
+	m.PreferURI("file:///C:/Proj/Src/X.al")
+	ch := publishMsg(t, "file:///c:/proj/src/X.al", "unused")
+	m.MergePublishDiagnostics(diagBackendCallHierarchy, ch)
+	if uri, _ := decodePublish(t, ch); uri != "file:///C:/Proj/Src/X.al" {
+		t.Errorf("uri = %q, want the client's", uri)
+	}
+}

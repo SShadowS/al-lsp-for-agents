@@ -760,6 +760,9 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 		switch msg.Method {
 		case "textDocument/didOpen":
 			if uri := extractTextDocumentURI(msg.Params); uri != "" {
+				if w.diagMerger != nil {
+					w.diagMerger.PreferURI(uri)
+				}
 				if path, err := FileURIToPath(uri); err == nil {
 					w.openedFiles[NormalizePath(path)] = true
 				}
