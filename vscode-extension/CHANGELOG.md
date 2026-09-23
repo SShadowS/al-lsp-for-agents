@@ -2,6 +2,20 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.17.0] - 2026-09-23
+
+### Added
+- **`AL_LSP_SOURCE_ROOTS`: resolve dependencies from source.** Set it to one or more folders (path list) that hold the source of other apps, for example the companion repos next to the app under review. The wrapper scans them once at startup. Any dependency one of them satisfies (same app id, same or higher version) is loaded from source, the way VS Code handles project references in a multi-root workspace. Hover, go to definition and find references then work across apps without `.alpackages`, and definitions land in the real source files. A source project also takes precedence over a `.app` of the same app, so a PR's source isn't shadowed by an older package. Symlinked folders, `.alpackages` and apps with non-numeric versions (e.g. Microsoft's `$(...)` placeholders) are skipped. Every referenced project gets compiled, so memory grows with the number of apps pulled in. Unset means no change.
+
+### Fixed
+- **Compiler errors could disappear behind code-quality hints on Windows.** The bundled al-sem engine reports a file's diagnostics under a differently-cased path than the AL Language Server, so the two sets never merged, and whichever arrived last replaced the other. They now merge, and each file's diagnostics come under one URI.
+- **The wrapper log went missing on Linux and macOS when `TMPDIR` was set.** The log was always written to `/tmp`, while the lock file followed `TMPDIR`. Both now use the OS temp directory.
+- **The first workspace symbol search of a session no longer times out on large setups.** It builds the AL Language Server's symbol index first, which took 24-45 s with the Base Application symbols and several source projects loaded. The wrapper gave up after 30 s. It now waits up to 120 s, and later searches still answer in milliseconds. Building the index adds about 1 GB to the AL Language Server's memory, the first time you search.
+- `app.json` files with a UTF-8 byte order mark are now read correctly.
+
+### Changed
+- No engine change: bundles [al-sem v1.2.0](https://github.com/SShadowS/al-sem/releases/tag/v1.2.0), same as 1.16.0.
+
 ## [1.16.0] - 2026-09-23
 
 ### Added
