@@ -205,9 +205,12 @@ class Client:
                 headers[k.strip().lower()] = v.strip()
             n = int(headers.get("content-length", 0))
             body = out.read(n)
+            if n > 1_000_000:
+                log(f"    [reader] big message: {n} bytes")
             try:
                 msg = json.loads(body.decode("utf-8"))
-            except Exception:
+            except Exception as e:
+                log(f"    [reader] PARSE FAIL {n} bytes (got {len(body)}): {e!r} head={body[:120]!r}")
                 continue
             self._dispatch(msg)
 
@@ -386,6 +389,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["baseline", "refs", "multiroot"], required=True,
                     help="multiroot = all closure folders as workspace folders, but closure=[active], no refs")
+    ap.add_argument("--folders-active-only", action="store_true",
+                    help="initialize with only the active project as workspace folder (closure still sent)")
     ap.add_argument("--touch", action="store_true", help="send a no-op didChange to each probe file before settling")
     ap.add_argument("--active", default=DEFAULT_ACTIVE)
     ap.add_argument("--roots", nargs="*", default=DEFAULT_ROOTS)
@@ -429,7 +434,8 @@ def main():
 
     client = Client(exe)
     log(f"host pid={client.proc.pid}")
-    folders = [{"uri": Path(f).as_uri(), "name": os.path.basename(f)} for f in order]
+    folders = [{"uri": Path(f).as_uri(), "name": os.path.basename(f)}
+               for f in (order[:1] if a.folders_active_only else order)]
 
     parent_of = {}
     for p, rs in refs.items():
@@ -649,7 +655,19 @@ def main():
         for method, params in (("workspace/symbol", {"query": "CSC XML Document"}),
                                ("al/symbolSearch", {"query": "CSC XML Document"})):
             t1 = time.time()
+            stop = threading.Event()
+
+            def cpu_watch():
+                client.ps.cpu_percent(None)
+                while not stop.wait(10):
+                    try:
+                        log(f"    {method} pending {time.time() - t1:.0f}s cpu={client.ps.cpu_percent(None):.0f}% "
+                            f"threads={client.ps.num_threads()} rss={client.rss() / 2**20:.0f}MB")
+                    except psutil.Error:
+                        return
+            threading.Thread(target=cpu_watch, daemon=True).start()
             r = client.request(method, params, timeout=a.symbol_timeout)
+            stop.set()
             res = r.get("result")
             if isinstance(res, dict):
                 res = res.get("symbols")
