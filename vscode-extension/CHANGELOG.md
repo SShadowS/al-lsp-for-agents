@@ -2,6 +2,14 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.16.0] - 2026-09-23
+
+### Added
+- **`AL_LSP_PACKAGE_CACHE`: point the wrapper at extra symbol package folders.** For setups that have the AL source but no `.alpackages` next to the project, such as CI or review containers with a shared symbol cache. The value is a path list (`:` on Linux, `;` on Windows). Those folders are searched after the project's own and ancestor `.alpackages`. Without symbols, nothing from other apps resolves: no Base Application tables, no system tables, and workspace symbol search can hang on the missing dependencies. Folders that don't exist are skipped. If the variable isn't set, nothing changes.
+
+### Changed
+- No engine change: this release bundles [al-sem v1.2.0](https://github.com/SShadowS/al-sem/releases/tag/v1.2.0), the same as 1.15.0.
+
 ## [1.15.0] - 2026-09-10
 
 ### Fixed
