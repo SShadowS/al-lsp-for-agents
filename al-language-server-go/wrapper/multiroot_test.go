@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // mockWrapper implements WrapperInterface for testing handler behavior
@@ -55,6 +56,10 @@ func (m *mockWrapper) EnsureFileOpened(filePath string) error {
 
 func (m *mockWrapper) EnsureProjectInitialized(filePath string) error {
 	return nil
+}
+
+func (m *mockWrapper) SendRequestToLSPWithTimeout(method string, params interface{}, _ time.Duration) (*Message, error) {
+	return m.SendRequestToLSP(method, params)
 }
 
 func (m *mockWrapper) SendRequestToLSP(method string, params interface{}) (*Message, error) {

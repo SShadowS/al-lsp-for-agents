@@ -188,13 +188,18 @@ ContiniaBase provides in the real layout. That needs a retest there before phase
 - **Workspace folders are not needed.** Only the active project as a workspace
   folder, plus the closure settings, gives the same resolution, references and
   diagnostics. `initialize` stays as it is.
-- **Symbol search hang is Core-specific, not caused by source refs.** Core/Cloud
-  alone (no refs, full symbol cache incl. Continia System Application) hangs both
-  `workspace/symbol` and `al/symbolSearch`: ~20 s of CPU, then idle with no
-  response and nothing in the host log. DeliveryNetwork alone answers in
-  0.2 s / 10 s. Something in Core's source trips a silent failure in the MS
-  SymbolSearchService. Not bisected yet. Consequence: any closure containing
-  Core loses workspaceSymbol (the wrapper's 30 s timeout turns it into an error).
+- **The "symbol search hang" was two things, neither a real hang.**
+  1. `workspace/symbol` never answers once Core is loaded (Core alone is
+     enough; DeliveryNetwork alone answers). My probe sent it first, and the
+     `al/symbolSearch` queued behind it looked hung too. The wrapper never
+     sends `workspace/symbol` (it maps workspaceSymbol to `al/symbolSearch`),
+     so this doesn't affect it.
+  2. The first `al/symbolSearch` of a session builds the symbol index over the
+     whole closure plus packages: 24 s with Base App symbols, 43-45 s with the
+     four Continia source projects on top, then milliseconds. The wrapper's
+     default 30 s request timeout cut it off. Fixed with a 120 s timeout for
+     `al/symbolSearch`. Building the index costs memory: the AL LS went from
+     938 MB to 2,038 MB, paid only when workspaceSymbol is used.
 - Unrelated bug found on the way: on Windows al-sem publishes diagnostics under a
   URI with lower-cased directories, and `DiagnosticMerger` keys by the exact
   string, so AL LS and al-sem diagnostics for one file don't merge.

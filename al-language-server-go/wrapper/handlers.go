@@ -160,6 +160,9 @@ type WrapperInterface interface {
 	// SendRequestToLSP sends a request to the AL LSP and waits for response
 	SendRequestToLSP(method string, params interface{}) (*Message, error)
 
+	// SendRequestToLSPWithTimeout is SendRequestToLSP with an explicit timeout
+	SendRequestToLSPWithTimeout(method string, params interface{}, timeout time.Duration) (*Message, error)
+
 	// SendNotificationToLSP sends a notification to the AL LSP
 	SendNotificationToLSP(method string, params interface{}) error
 
@@ -1161,6 +1164,14 @@ func warnOnceEmptyWorkspaceSymbol(w WrapperInterface) {
 // returns results we know the index is warm and treat 0 as a genuine miss.
 var symbolSearchEverReturnedResults atomic.Bool
 
+// symbolSearchTimeout bounds al/symbolSearch. The first search of a session
+// builds the AL LS symbol index over the whole closure plus its packages,
+// which is slow: measured 24 s with the Base App symbols loaded and 43 s
+// with four source-referenced Continia projects on top. Later searches
+// answer in milliseconds. The default 30 s request timeout cut the cold
+// search off, so it looked like a hang.
+const symbolSearchTimeout = 120 * time.Second
+
 // coldSymbolSearchBackoffs are the waits between retries when al/symbolSearch
 // returns 0 results and the index has never warmed this session. One-time
 // cost at session start; bounded so the (synchronous) client read loop is
@@ -1255,7 +1266,7 @@ func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 	var symbols []SymbolInformation
 	for attempt := 0; ; attempt++ {
 		w.Log("Sending al/symbolSearch for query: %s (attempt %d)", query, attempt+1)
-		response, err := w.SendRequestToLSP("al/symbolSearch", ALSymbolSearchParams{Query: query})
+		response, err := w.SendRequestToLSPWithTimeout("al/symbolSearch", ALSymbolSearchParams{Query: query}, symbolSearchTimeout)
 		if err != nil {
 			w.Log("Failed to send al/symbolSearch request: %v", err)
 			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())

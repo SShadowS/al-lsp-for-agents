@@ -404,6 +404,8 @@ def main():
     ap.add_argument("--settle", type=int, default=20, help="seconds to wait for diagnostics after opening files")
     ap.add_argument("--probes", nargs="*", help="only run probes whose label contains one of these")
     ap.add_argument("--symbol-timeout", type=int, default=180)
+    ap.add_argument("--symbol-methods", nargs="*", default=["workspace/symbol", "al/symbolSearch"])
+    ap.add_argument("--symbol-queries", nargs="*", default=["CSC XML Document"])
     ap.add_argument("--out")
     ap.add_argument("--switch-to", help="after probes: activate this dependency project, re-probe, switch back, re-probe")
     ap.add_argument("--cache", nargs="*", default=[], help="extra packageCachePaths (absolute), like AL_LSP_PACKAGE_CACHE")
@@ -652,8 +654,7 @@ def main():
         for k, v in report["diagnostics"].items():
             log(f"  diag {k}: {json.dumps({x: v.get(x) for x in ('errors', 'by_code')})}")
 
-        for method, params in (("workspace/symbol", {"query": "CSC XML Document"}),
-                               ("al/symbolSearch", {"query": "CSC XML Document"})):
+        for method, params in [(m, {"query": q}) for q in a.symbol_queries for m in a.symbol_methods]:
             t1 = time.time()
             stop = threading.Event()
 
@@ -671,9 +672,9 @@ def main():
             res = r.get("result")
             if isinstance(res, dict):
                 res = res.get("symbols")
-            report[method] = ([(x.get("name"), summarize_locations(x.get("location"))) for x in (res or [])[:8]]
+            report[method + " " + params["query"]] = ([(x.get("name"), summarize_locations(x.get("location"))) for x in (res or [])[:8]]
                               if "result" in r else f"ERR {r.get('error')}")
-            log(f"  {method} ({time.time() - t1:.1f}s): {report[method]}")
+            log(f"  {method} {params['query']!r} ({time.time() - t1:.1f}s): {str(report[method + ' ' + params['query']])[:160]}")
         report["peak_rss_mb"] = round(client.peak_rss / 2**20)
         report["server_requests"] = sorted(set(client.server_requests))
         report["messages"] = client.messages[-30:]
