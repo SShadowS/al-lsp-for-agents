@@ -2,6 +2,15 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.4] - 2026-10-03
+
+### Added
+- **`AL_SEM_DEPENDENCY_SOURCE=symbols` (or `--dependency-source symbols`) for the bundled al-call-hierarchy.** It indexes each dependency from its symbols only. Calls from your code into Base Application and other dependencies still resolve, but the dependencies' own internals are not indexed. Use it where memory is tight. The default (`embedded`) is unchanged.
+
+### Changed
+- **Workspaces with several AL projects use much less memory.** The bundled engine (al-sem v1.3.2) now loads each dependency once and shares it between all workspace roots that use the same `.alpackages`. Before, every root kept its own copy. Measured on a 7-project workspace with the BC 28.4 Microsoft packages and `symbols`: about 1.2 GB peak before, about 0.5 GB after. Reading Microsoft's 58 MB Base Application symbol file also no longer takes about 1 GB of temporary memory.
+- `alsem` (Windows and Linux) rebuilt from al-sem v1.3.2.
+
 ## [1.18.3] - 2026-10-03
 
 ### Fixed
