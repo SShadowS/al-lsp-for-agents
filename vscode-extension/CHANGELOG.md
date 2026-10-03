@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.1] - 2026-10-03
+
+### Fixed
+- **`alsem` now runs on Windows Server Core** (for example Business Central containers). The Windows plugin's `alsem.exe` was a 1.14.0-era build that needed `VCRUNTIME140.dll` from the VC++ redistributable, so it failed at startup there. It is now al-sem v1.3.0, with the C runtime built in, and signed.
+
 ## [1.18.0] - 2026-10-03
 
 ### Fixed
