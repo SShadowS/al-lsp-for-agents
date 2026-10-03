@@ -17,7 +17,8 @@ Thumbs.db
 tmpclaude-*
 
 CLAUDE.md
-.claude/
+.claude/*
+!.claude/rules/
 .alpackages/
 
 # Compiled AL apps in harness fixtures (rebuild via alc.exe per fixture README)

@@ -11,9 +11,9 @@ For `.al` files, **use the LSP tool instead of Grep/Glob/Read** for anything abo
 - "What type is X? What fields does this table have?" -> `hover`, not Read
 - "What's in this file?" -> `documentSymbol`, not Read
 - "Find a symbol by name" -> `workspaceSymbol` with a `query`, not Grep (needs Claude Code 2.1.x+)
-- "What extends/implements X? What's X's source table?" -> `symbolRelations`
-- "What's on this page? page layout/actions?" -> `inspectPage`
-- "How many references? Code quality?" -> `codeLens`
+- "How many references?" -> `findReferences` and count, or `incomingCalls` for procedures
+
+The wrapper also serves `symbolRelations`, `inspectPage` and code lenses, but Claude Code's LSP tool can't call them: it only has the operations above. For a table's or page's structure, use `hover` and `documentSymbol` instead.
 
 ## When Grep/Glob is fine
 
