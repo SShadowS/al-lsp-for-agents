@@ -16,7 +16,7 @@ Thumbs.db
 # Claude Code temp files
 tmpclaude-*
 
-CLAUDE.md
+CLAUDE.local.md
 .claude/*
 !.claude/rules/
 .alpackages/
