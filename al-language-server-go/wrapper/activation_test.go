@@ -114,6 +114,90 @@ func TestDocumentEventActivatesProject(t *testing.T) {
 	}
 }
 
+// newTwoProjectWrapper returns a wrapper over two on-disk AL projects A and B,
+// neither initialized nor active, wired to a fake AL LS.
+func newTwoProjectWrapper(t *testing.T) (w *ALLSPWrapper, fake *fakeALLS, projA, projB string) {
+	root := t.TempDir()
+	projA, projB = filepath.Join(root, "A"), filepath.Join(root, "B")
+	for _, p := range []string{projA, projB} {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, p, "app.json", `{"id":"x","name":"x","publisher":"P","version":"1.0.0.0"}`)
+	}
+	w = &ALLSPWrapper{
+		openedFiles:         make(map[string]bool),
+		initializedProjects: make(map[string]bool),
+		projectManifests:    make(map[string]*AppManifest),
+		pendingReqs:         make(map[int]chan *Message),
+		responseQueue:       make(map[int]*Message),
+	}
+	return w, newFakeALLS(w), projA, projB
+}
+
+// indexOf returns the position of method in got, or -1.
+func indexOf(got []string, method string) int {
+	for i, m := range got {
+		if m == method {
+			return i
+		}
+	}
+	return -1
+}
+
+// Every project's first activation must wait for its closure to load, not
+// only the session's first project. Otherwise requests right after a switch
+// to a second project are answered from a half-loaded closure.
+func TestFirstActivationOfEachProjectWaitsForLoad(t *testing.T) {
+	w, fake, projA, projB := newTwoProjectWrapper(t)
+
+	for _, p := range []string{projA, projB} {
+		if err := w.EnsureProjectInitialized(filepath.Join(p, "x.al")); err != nil {
+			t.Fatal(err)
+		}
+		// didChangeConfiguration, didOpen(app.json), loadManifest,
+		// setActiveWorkspace, hasProjectClosureLoaded
+		got := fake.take(5)
+		act, wait := indexOf(got, "al/setActiveWorkspace"), indexOf(got, "al/hasProjectClosureLoadedRequest")
+		if act < 0 || wait < act {
+			t.Fatalf("%s: want setActiveWorkspace then hasProjectClosureLoadedRequest, got %v", filepath.Base(p), got)
+		}
+	}
+
+	// Switching back to A (already loaded once) activates without waiting.
+	if err := w.EnsureProjectInitialized(filepath.Join(projA, "x.al")); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.take(2); len(got) != 1 || got[0] != "al/setActiveWorkspace" {
+		t.Fatalf("re-activation: want [al/setActiveWorkspace], got %v", got)
+	}
+}
+
+// workspace/symbol carries no document. With nothing active it must activate
+// (and wait for) the project found at initialize before searching.
+func TestEnsureAnyProjectActiveUsesInitProject(t *testing.T) {
+	w, fake, projA, _ := newTwoProjectWrapper(t)
+	w.initProjectRoot = projA
+
+	if err := w.EnsureAnyProjectActive(); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.take(5); indexOf(got, "al/hasProjectClosureLoadedRequest") < 0 {
+		t.Fatalf("want activation with load wait, got %v", got)
+	}
+	if w.activeProject != NormalizePath(projA) {
+		t.Fatalf("activeProject = %q, want A", w.activeProject)
+	}
+
+	// Already active: nothing sent.
+	if err := w.EnsureAnyProjectActive(); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.take(1); len(got) != 0 {
+		t.Fatalf("want nothing sent, got %v", got)
+	}
+}
+
 // A client-sent al/setActiveWorkspace must update the wrapper's cache, or the
 // next request for the previously cached project skips a needed re-activation.
 func TestSetActiveWorkspaceHandlerUpdatesActiveProject(t *testing.T) {

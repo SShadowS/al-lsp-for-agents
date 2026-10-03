@@ -80,6 +80,7 @@ type ALLSPWrapper struct {
 	workspaceRoot       string
 	workspaceFolders    []WorkspaceFolder
 	activeProject       string // Currently active project root (normalized path)
+	initProjectRoot     string // AL project found at initialize; fallback for requests with no document
 
 	// Request tracking
 	requestID   int
@@ -871,6 +872,8 @@ func (w *ALLSPWrapper) handleInitialize(msg *Message) (*Message, error) {
 		}
 	}
 
+	w.initProjectRoot = projectRoot
+
 	// Build initialize params for AL LSP
 	var initParams *InitializeParams
 	if projectRoot != "" {
@@ -1317,9 +1320,10 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 	}
 
 	normalizedRoot := NormalizePath(projectRoot)
+	firstInit := !w.initializedProjects[normalizedRoot]
 
 	// One-time initialization: workspace config, manifest, app.json
-	if !w.initializedProjects[normalizedRoot] {
+	if firstInit {
 		w.Log("Initializing project: %s", normalizedRoot)
 
 		// Parse app.json manifest
@@ -1368,8 +1372,10 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 			w.Log("Failed to set active workspace: %v", err)
 		}
 
-		// Wait for project to load (only on first activation)
-		if w.activeProject == "" {
+		// Wait for the project to load on its first activation. This used to
+		// wait only for the session's first project, so a request right after
+		// switching to a second project got answers from a half-loaded closure.
+		if firstInit {
 			w.waitForProjectLoad(normalizedRoot)
 		}
 
@@ -1377,6 +1383,16 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 	}
 
 	return nil
+}
+
+// EnsureAnyProjectActive activates the AL project found at initialize when no
+// project is active yet. For requests that carry no document (workspace/symbol):
+// without an active project al/symbolSearch has nothing loaded to search.
+func (w *ALLSPWrapper) EnsureAnyProjectActive() error {
+	if w.activeProject != "" || w.initProjectRoot == "" {
+		return nil
+	}
+	return w.EnsureProjectInitialized(filepath.Join(w.initProjectRoot, "app.json"))
 }
 
 // SetActiveProject records a project activated outside EnsureProjectInitialized

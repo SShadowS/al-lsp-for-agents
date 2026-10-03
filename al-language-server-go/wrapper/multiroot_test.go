@@ -59,6 +59,10 @@ func (m *mockWrapper) EnsureProjectInitialized(filePath string) error {
 	return nil
 }
 
+func (m *mockWrapper) EnsureAnyProjectActive() error {
+	return nil
+}
+
 func (m *mockWrapper) SetActiveProject(projectRoot string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

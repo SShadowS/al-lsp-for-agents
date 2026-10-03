@@ -160,6 +160,9 @@ type WrapperInterface interface {
 	// SetActiveProject records which project the AL LSP has active
 	SetActiveProject(projectRoot string)
 
+	// EnsureAnyProjectActive activates a default project when none is active
+	EnsureAnyProjectActive() error
+
 	// SendRequestToLSP sends a request to the AL LSP and waits for response
 	SendRequestToLSP(method string, params interface{}) (*Message, error)
 
@@ -1258,6 +1261,13 @@ func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 	if strings.Contains(query, "/") || strings.Contains(query, "\\") {
 		query = ExtractSymbolFromPath(query)
 		w.Log("Extracted symbol from path: %s", query)
+	}
+
+	// No document to activate a project from. On a cold start nothing is
+	// active and al/symbolSearch returns [] in ~3 s; activate (and wait for)
+	// the workspace's project first.
+	if err := w.EnsureAnyProjectActive(); err != nil {
+		w.Log("Failed to activate a project for workspace/symbol: %v", err)
 	}
 
 	// Use al/symbolSearch exclusively - workspace/symbol deadlocks the AL LSP
