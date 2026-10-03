@@ -263,6 +263,101 @@ func (w *ALLSPWrapper) workspaceSettings(root string, m *AppManifest) *Workspace
 	return s
 }
 
+// dependentTops returns the workspace projects that must be activated so that
+// every project depending on target (directly or transitively) is loaded:
+// the dependents no other dependent depends on, minus those already inside
+// the closure of a project in loaded. Sorted for a stable order.
+func (ix *SourceIndex) dependentTops(target string, loaded []string) []*sourceProject {
+	target = strings.ToLower(NormalizePath(target))
+	closureOf := func(p *sourceProject) map[string]bool {
+		set := map[string]bool{}
+		for _, r := range ix.closure(p.root, p.manifest) {
+			set[strings.ToLower(r)] = true
+		}
+		return set
+	}
+
+	var dependents []*sourceProject
+	closures := map[*sourceProject]map[string]bool{}
+	for k, p := range ix.byRoot {
+		if k == target {
+			continue
+		}
+		if c := closureOf(p); c[target] {
+			dependents = append(dependents, p)
+			closures[p] = c
+		}
+	}
+
+	isLoaded := map[string]bool{}
+	for _, l := range loaded {
+		if p := ix.byRoot[strings.ToLower(NormalizePath(l))]; p != nil {
+			for k := range closureOf(p) {
+				isLoaded[k] = true
+			}
+		}
+	}
+
+	var tops []*sourceProject
+	for _, d := range dependents {
+		k := strings.ToLower(d.root)
+		covered := isLoaded[k]
+		for _, e := range dependents {
+			if e != d && closures[e][k] {
+				covered = true // e loads d
+			}
+		}
+		if !covered {
+			tops = append(tops, d)
+		}
+	}
+	sort.Slice(tops, func(i, j int) bool { return tops[i].root < tops[j].root })
+	return tops
+}
+
+// EnsureDependentsLoaded makes the AL LS load every workspace project that
+// depends on filePath's project, then switches back to that project.
+//
+// Activating a project loads only its own dependencies. Projects that depend
+// on it load only when one of them (or a project above them) is activated, so
+// references to a Core symbol miss the uses in Leasing until something like
+// Test has been active. Loaded projects stay loaded after a switch away, so
+// this costs one activation per top-level dependent, once per session.
+func (w *ALLSPWrapper) EnsureDependentsLoaded(filePath string) error {
+	projectRoot := GetProjectRoot(filePath)
+	if projectRoot == "" {
+		return nil
+	}
+	if w.workspaceIndex == nil {
+		var roots []string
+		for _, f := range w.workspaceFolders {
+			if p, err := FileURIToPath(f.URI); err == nil {
+				roots = append(roots, p)
+			}
+		}
+		if len(roots) == 0 && w.workspaceRoot != "" {
+			roots = []string{w.workspaceRoot}
+		}
+		w.workspaceIndex = BuildSourceIndex(roots, w.Log)
+	}
+
+	loaded := make([]string, 0, len(w.initializedProjects))
+	for p := range w.initializedProjects {
+		loaded = append(loaded, p)
+	}
+	tops := w.workspaceIndex.dependentTops(projectRoot, loaded)
+	if len(tops) == 0 {
+		return nil
+	}
+	for _, t := range tops {
+		w.Log("Loading dependent project %s so references from %s see it", t.root, projectRoot)
+		if err := w.EnsureProjectInitialized(filepath.Join(t.root, "app.json")); err != nil {
+			return err
+		}
+	}
+	return w.EnsureProjectInitialized(filePath)
+}
+
 // sendReferenceConfigs handles al/activeProjectLoaded params
 // ({"activeProjectFolder": "<uri>"}).
 func (w *ALLSPWrapper) sendReferenceConfigs(raw json.RawMessage) {

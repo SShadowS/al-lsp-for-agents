@@ -163,6 +163,9 @@ type WrapperInterface interface {
 	// EnsureAnyProjectActive activates a default project when none is active
 	EnsureAnyProjectActive() error
 
+	// EnsureDependentsLoaded loads the workspace projects that depend on a file's project
+	EnsureDependentsLoaded(filePath string) error
+
 	// SendRequestToLSP sends a request to the AL LSP and waits for response
 	SendRequestToLSP(method string, params interface{}) (*Message, error)
 
@@ -1376,6 +1379,12 @@ func (h *ReferencesHandler) Handle(msg *Message, w WrapperInterface) (*Message, 
 		if err := w.EnsureProjectInitialized(filePath); err != nil {
 			w.Log("Failed to initialize project: %v", err)
 			return nil, NewErrorResponse(msg.ID, InternalError, err.Error())
+		}
+
+		// Uses in projects that depend on this one are only found once
+		// those projects are loaded. Best effort: answer anyway on failure.
+		if err := w.EnsureDependentsLoaded(filePath); err != nil {
+			w.Log("Failed to load dependent projects: %v", err)
 		}
 	} else {
 		w.Log("Virtual URI detected, forwarding directly: %s", params.TextDocument.URI)

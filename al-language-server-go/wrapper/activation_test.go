@@ -198,6 +198,79 @@ func TestEnsureAnyProjectActiveUsesInitProject(t *testing.T) {
 	}
 }
 
+// References from Core must see uses in Leasing, which only loads when a
+// project above it (Test) is activated. The wrapper activates Test once, not
+// Leasing (Test's closure covers it) and not the unrelated Other, then
+// switches back to Core.
+func TestEnsureDependentsLoadedActivatesTopDependent(t *testing.T) {
+	root := t.TempDir()
+	app := func(name, id string, deps ...string) {
+		p := filepath.Join(root, name)
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		var ds []map[string]string
+		for _, d := range deps {
+			ds = append(ds, map[string]string{"id": d, "name": d, "publisher": "P", "version": "1.0.0.0"})
+		}
+		body, _ := json.Marshal(map[string]interface{}{"id": id, "name": name, "publisher": "P", "version": "1.0.0.0", "dependencies": ds})
+		writeTestFile(t, p, "app.json", string(body))
+	}
+	app("Core", "core")
+	app("Leasing", "leasing", "core")
+	app("Test", "test", "leasing", "core")
+	app("Other", "other")
+
+	core := NormalizePath(filepath.Join(root, "Core"))
+	w := &ALLSPWrapper{
+		openedFiles:         make(map[string]bool),
+		initializedProjects: map[string]bool{core: true},
+		projectManifests:    make(map[string]*AppManifest),
+		pendingReqs:         make(map[int]chan *Message),
+		responseQueue:       make(map[int]*Message),
+		activeProject:       core,
+		workspaceFolders:    []WorkspaceFolder{{URI: PathToFileURI(root), Name: "ws"}},
+	}
+	fake := newFakeALLS(w)
+	coreFile := filepath.Join(root, "Core", "x.al")
+
+	if err := w.EnsureDependentsLoaded(coreFile); err != nil {
+		t.Fatal(err)
+	}
+	// Test: didChangeConfiguration, didOpen(app.json), loadManifest,
+	// setActiveWorkspace, hasProjectClosureLoaded; then back to Core:
+	// setActiveWorkspace.
+	got := fake.take(6)
+	var activations []string
+	for _, m := range got {
+		if m == "al/setActiveWorkspace" {
+			activations = append(activations, m)
+		}
+	}
+	if len(activations) != 2 || indexOf(got, "al/hasProjectClosureLoadedRequest") < 0 {
+		t.Fatalf("want Test activated with a load wait, then Core again; got %v", got)
+	}
+	if !w.initializedProjects[NormalizePath(filepath.Join(root, "Test"))] {
+		t.Fatal("Test was not activated")
+	}
+	for _, skip := range []string{"Leasing", "Other"} {
+		if w.initializedProjects[NormalizePath(filepath.Join(root, skip))] {
+			t.Fatalf("%s should not be activated", skip)
+		}
+	}
+	if w.activeProject != core {
+		t.Fatalf("activeProject = %q, want Core back", w.activeProject)
+	}
+
+	// Once per session: dependents are loaded now, nothing is sent.
+	if err := w.EnsureDependentsLoaded(coreFile); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.take(1); len(got) != 0 {
+		t.Fatalf("second call: want nothing sent, got %v", got)
+	}
+}
+
 // A client-sent al/setActiveWorkspace must update the wrapper's cache, or the
 // next request for the previously cached project skips a needed re-activation.
 func TestSetActiveWorkspaceHandlerUpdatesActiveProject(t *testing.T) {

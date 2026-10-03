@@ -81,6 +81,7 @@ type ALLSPWrapper struct {
 	workspaceFolders    []WorkspaceFolder
 	activeProject       string // Currently active project root (normalized path)
 	initProjectRoot     string // AL project found at initialize; fallback for requests with no document
+	workspaceIndex      *SourceIndex // AL projects under the workspace folders, built on first references
 
 	// Request tracking
 	requestID   int
