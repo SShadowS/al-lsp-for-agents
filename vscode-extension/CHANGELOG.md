@@ -2,6 +2,12 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.3] - 2026-10-03
+
+### Fixed
+- **Base Application, System Application and other Microsoft apps from BC 28 are no longer missing.** Microsoft ships them as Ready-to-Run packages, which nest the real app inside a second `.app`. The bundled engine (al-sem v1.3.1) read only the outer package, logged `NavxManifest.xml not found in app package`, and skipped the app, so call hierarchy, code lens and `alsem` could not see into it. On a BC 28.4 test workspace the engine went from 290 to 111,635 dependency definitions. Applies to `al-call-hierarchy` and to `alsem` on both Windows and Linux.
+- **Find references now includes callers in other workspace projects.** Before answering, the wrapper loads the workspace projects that depend on the file's project (the top-level ones, once per session), then switches back.
+
 ## [1.18.2] - 2026-10-03
 
 ### Fixed
