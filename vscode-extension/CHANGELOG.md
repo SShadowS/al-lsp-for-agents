@@ -2,6 +2,12 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.2] - 2026-10-03
+
+### Fixed
+- **Each project now waits for its dependencies to load the first time it is activated.** Before, only the session's first project waited, so the first request in any other project could run before its dependencies were loaded.
+- **Workspace symbol search works before any project is active.** It now activates the AL project found at startup when no project is active yet.
+
 ## [1.18.1] - 2026-10-03
 
 ### Fixed
