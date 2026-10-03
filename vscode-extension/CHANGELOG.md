@@ -2,6 +2,13 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.0] - 2026-10-03
+
+### Fixed
+- **Call hierarchy and code lens now work on Windows Server Core** (for example Business Central containers). The bundled al-call-hierarchy (al-sem v1.3.0) now has the C runtime built in. Before, it needed `VCRUNTIME140.dll` from the VC++ redistributable, which Server Core does not ship, so it exited at startup and the wrapper reported `write |1: The pipe is being closed`.
+- **Editing a file in a project that isn't the active one now publishes its diagnostics.** The AL Language Server only reports diagnostics for the active project, and the wrapper switched projects only on definition, hover, document symbols and references. It now also switches on `didOpen` and `didChange`. If the project is already active, nothing changes.
+- A client-sent `al/setActiveWorkspace` now also updates the wrapper's record of the active project, so a later request no longer skips a project switch it needs.
+
 ## [1.17.0] - 2026-09-23
 
 ### Added
