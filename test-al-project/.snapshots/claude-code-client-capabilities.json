@@ -1,13 +1,16 @@
 {
   "_meta": {
     "description": "Claude Code LSP client capabilities baseline",
-    "captured_from": "Log file: C:/Users/SShadowS/AppData/Local/Temp/al-lsp-wrapper-go-112616.log",
-    "last_updated": "2026-02-15",
+    "captured_from": "Log file: C:\\Users\\SShadowS\\AppData\\Local\\Temp/al-lsp-wrapper-go-81504.log",
+    "last_updated": "2026-10-03",
     "notes": "This file tracks the LSP capabilities that Claude Code sends during initialize. Update when capabilities change."
   },
   "workspace": {
-    "configuration": false,
-    "workspaceFolders": false
+    "configuration": true,
+    "workspaceFolders": false,
+    "didChangeWatchedFiles": {
+      "dynamicRegistration": false
+    }
   },
   "textDocument": {
     "synchronization": {
