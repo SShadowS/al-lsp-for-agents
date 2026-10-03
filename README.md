@@ -100,8 +100,10 @@ Claude can use these LSP operations on AL files:
 | `incomingCalls` | Working | Find callers of a procedure |
 | `outgoingCalls` | Working | Find calls made by a procedure |
 | `workspaceSymbol` | Working | Pass a `query`; needs Claude Code 2.1.x+ |
-| `symbolRelations` | Working | Related symbols (extends/implements/source table/extended-by) |
-| `inspectPage` | Working | Page control/action tree (requires nuget al tool) |
+| `symbolRelations` | VS Code only | Related symbols (extends/implements/source table/extended-by) |
+| `inspectPage` | VS Code only | Page control/action tree (requires nuget al tool) |
+
+`symbolRelations` and `inspectPage` are custom wrapper methods. The VS Code extension exposes them as the `bclsp_symbolRelations` and `bclsp_inspectPage` tools. Claude Code's LSP tool only offers the fixed operations above, so Claude can't call them there.
 
 ## Known Issues
 
