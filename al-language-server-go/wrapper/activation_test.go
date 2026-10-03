@@ -1,0 +1,130 @@
+package wrapper
+
+import (
+	"bufio"
+	"encoding/json"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+	"testing"
+	"time"
+)
+
+// fakeALLS wires w.stdin to an in-process pipe that records every message the
+// wrapper sends the AL LS and answers requests with {"loaded":true}.
+type fakeALLS struct {
+	mu      sync.Mutex
+	methods []string
+}
+
+func newFakeALLS(w *ALLSPWrapper) *fakeALLS {
+	f := &fakeALLS{}
+	pr, pw := io.Pipe()
+	w.stdin = pw
+	go func() {
+		r := bufio.NewReader(pr)
+		for {
+			msg, err := ReadMessage(r)
+			if err != nil {
+				return
+			}
+			f.mu.Lock()
+			f.methods = append(f.methods, msg.Method)
+			f.mu.Unlock()
+			if msg.ID == nil {
+				continue
+			}
+			var id int
+			json.Unmarshal(*msg.ID, &id)
+			w.pendingMu.Lock()
+			ch := w.pendingReqs[id]
+			w.pendingMu.Unlock()
+			if ch != nil {
+				ch <- &Message{JSONRPC: "2.0", ID: msg.ID, Result: json.RawMessage(`{"loaded":true}`)}
+			}
+		}
+	}()
+	return f
+}
+
+// take returns what the fake has recorded once it holds n messages (or after
+// 2 s), then resets. The pipe write returns before the reader has recorded.
+func (f *fakeALLS) take(n int) []string {
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		f.mu.Lock()
+		got := len(f.methods)
+		f.mu.Unlock()
+		if got >= n {
+			break
+		}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := f.methods
+	f.methods = nil
+	return out
+}
+
+// An edit in a non-active project must switch the AL LS to that project before
+// the edit reaches it, or the AL LS never publishes diagnostics for it.
+func TestDocumentEventActivatesProject(t *testing.T) {
+	root := t.TempDir()
+	projA, projB := filepath.Join(root, "A"), filepath.Join(root, "B")
+	for _, p := range []string{projA, projB} {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, p, "app.json", `{"id":"x","name":"x","publisher":"P","version":"1.0.0.0"}`)
+	}
+
+	w := &ALLSPWrapper{
+		openedFiles:         make(map[string]bool),
+		initializedProjects: map[string]bool{NormalizePath(projA): true, NormalizePath(projB): true},
+		projectManifests:    make(map[string]*AppManifest),
+		pendingReqs:         make(map[int]chan *Message),
+		responseQueue:       make(map[int]*Message),
+		activeProject:       NormalizePath(projA),
+	}
+	fake := newFakeALLS(w)
+
+	send := func(method string) {
+		params, _ := json.Marshal(map[string]interface{}{
+			"textDocument": map[string]interface{}{"uri": PathToFileURI(filepath.Join(projB, "x.al")), "version": 2},
+		})
+		if _, err := w.handleMessage(&Message{JSONRPC: "2.0", Method: method, Params: params}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	send("textDocument/didChange")
+	got := fake.take(2)
+	if len(got) != 2 || got[0] != "al/setActiveWorkspace" || got[1] != "textDocument/didChange" {
+		t.Fatalf("want [al/setActiveWorkspace textDocument/didChange], got %v", got)
+	}
+	if w.activeProject != NormalizePath(projB) {
+		t.Fatalf("activeProject = %q, want B", w.activeProject)
+	}
+
+	// Already active: forwarded as-is, no second activation.
+	send("textDocument/didOpen")
+	// Wait for 2 so a spurious activation would be caught, not raced past.
+	if got := fake.take(2); len(got) != 1 || got[0] != "textDocument/didOpen" {
+		t.Fatalf("want [textDocument/didOpen], got %v", got)
+	}
+}
+
+// A client-sent al/setActiveWorkspace must update the wrapper's cache, or the
+// next request for the previously cached project skips a needed re-activation.
+func TestSetActiveWorkspaceHandlerUpdatesActiveProject(t *testing.T) {
+	m := newMockWrapper()
+	params, _ := json.Marshal(map[string]interface{}{
+		"currentWorkspaceFolderPath": map[string]interface{}{"uri": "file:///c%3A/projects/leasing", "name": "leasing"},
+	})
+	id := json.RawMessage(`1`)
+	(&SetActiveWorkspaceHandler{}).Handle(&Message{JSONRPC: "2.0", ID: &id, Method: "al/setActiveWorkspace", Params: params}, m)
+
+	if want := NormalizePath("c:/projects/leasing"); NormalizePath(m.activeProject) != want {
+		t.Fatalf("activeProject = %q, want %q", m.activeProject, want)
+	}
+}

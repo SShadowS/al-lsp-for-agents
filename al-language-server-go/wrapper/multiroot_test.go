@@ -23,6 +23,7 @@ type mockWrapper struct {
 	workspaceFolders    []WorkspaceFolder
 	callHierarchyServer *CallHierarchyServer
 	previewCache        *previewCache
+	activeProject       string
 	logs                []string
 
 	// lspResponder, when set, supplies the response for SendRequestToLSP
@@ -56,6 +57,12 @@ func (m *mockWrapper) EnsureFileOpened(filePath string) error {
 
 func (m *mockWrapper) EnsureProjectInitialized(filePath string) error {
 	return nil
+}
+
+func (m *mockWrapper) SetActiveProject(projectRoot string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.activeProject = projectRoot
 }
 
 func (m *mockWrapper) SendRequestToLSPWithTimeout(method string, params interface{}, _ time.Duration) (*Message, error) {

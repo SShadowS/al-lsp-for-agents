@@ -157,6 +157,9 @@ type WrapperInterface interface {
 	// EnsureProjectInitialized ensures the project for a file is initialized
 	EnsureProjectInitialized(filePath string) error
 
+	// SetActiveProject records which project the AL LSP has active
+	SetActiveProject(projectRoot string)
+
 	// SendRequestToLSP sends a request to the AL LSP and waits for response
 	SendRequestToLSP(method string, params interface{}) (*Message, error)
 
@@ -1543,6 +1546,10 @@ func (h *SetActiveWorkspaceHandler) Handle(msg *Message, w WrapperInterface) (*M
 			ID:      msg.ID,
 			Error:   response.Error,
 		}
+	}
+
+	if path, err := FileURIToPath(params.CurrentWorkspaceFolderPath.URI); err == nil {
+		w.SetActiveProject(path)
 	}
 
 	return &Message{

@@ -750,6 +750,27 @@ func (w *ALLSPWrapper) handleMessage(msg *Message) (*Message, error) {
 		if len(msg.Params) > 0 {
 			json.Unmarshal(msg.Params, &params)
 		}
+
+		// The AL LS only publishes diagnostics for the active project, so an
+		// edit in another project stayed silent until a hover or similar
+		// request switched to it. Activate the document's project before the
+		// AL LS sees the event. No-op when that project is already active.
+		switch msg.Method {
+		case "textDocument/didOpen", "textDocument/didChange":
+			if uri := extractTextDocumentURI(msg.Params); uri != "" {
+				if path, err := FileURIToPath(uri); err == nil {
+					if msg.Method == "textDocument/didOpen" {
+						// Mark first so project init's EnsureFileOpened(app.json)
+						// can't send a duplicate didOpen when this IS app.json.
+						w.openedFiles[NormalizePath(path)] = true
+					}
+					if err := w.EnsureProjectInitialized(path); err != nil {
+						w.Log("Failed to activate project for %s: %v", path, err)
+					}
+				}
+			}
+		}
+
 		w.SendNotificationToLSP(msg.Method, params)
 
 		// Track file open/close state so EnsureFileOpened doesn't send
@@ -1356,6 +1377,13 @@ func (w *ALLSPWrapper) EnsureProjectInitialized(filePath string) error {
 	}
 
 	return nil
+}
+
+// SetActiveProject records a project activated outside EnsureProjectInitialized
+// (a client-sent al/setActiveWorkspace), so the next activation check isn't
+// made against a stale project.
+func (w *ALLSPWrapper) SetActiveProject(projectRoot string) {
+	w.activeProject = NormalizePath(projectRoot)
 }
 
 // getWorkspaceFolderIndex returns the index of a project root in the workspace folders list.
