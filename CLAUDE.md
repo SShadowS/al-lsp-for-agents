@@ -27,7 +27,7 @@ al-language-server-go-linux/             # Linux plugin (binaries + config)
 vscode-extension/                        # VS Code extension (TypeScript)
 test-al-project/                         # Test project and test scripts
 docs/                                    # Specs and plans
-.claude/rules/AL-LSP-RULES.md           # AL protocol rules
+.claude/rules/                           # LSP plugin config reference, AL LSP tool usage
 .claude-plugin-dev/.claude-plugin/       # Dev marketplace (gitignored)
 ```
 
@@ -179,7 +179,7 @@ The AL Language Server uses custom commands beyond standard LSP:
 - `al/setActiveWorkspace` for workspace initialization
 - Files must be opened with `textDocument/didOpen` before operations work
 
-See `.claude/rules/AL-LSP-RULES.md` for full protocol documentation.
+See `docs/ms-al-lsp-comparison.md` for the `al/*` protocol and how it differs from Microsoft's other servers.
 
 ## LSP Configuration
 
