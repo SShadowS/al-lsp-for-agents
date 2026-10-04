@@ -2,6 +2,15 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.5] - 2026-10-04
+
+### Changed
+- **Bundles al-sem v1.3.3.** With the default `embedded` dependency source, workspace roots that share a dependency set now share the parsed dependencies too (7 roots: about 2.9 GB to 1.3 GB, and faster). Large dependency files are read with less memory at once.
+- **`alsem` is now built and signed by CI** together with al-call-hierarchy.
+
+### Fixed
+- **A rare hang in `alsem analyze`** when the transaction-integrity detectors (d47, d49, d51) ran together with other detectors.
+
 ## [1.18.4] - 2026-10-03
 
 ### Added
