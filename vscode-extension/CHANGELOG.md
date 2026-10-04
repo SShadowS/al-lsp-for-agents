@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.6] - 2026-10-04
+
+### Changed
+- **Bundles al-sem v1.3.4: much lower start-up memory for the bundled al-call-hierarchy.** Each dependency file is now summarized right after it is parsed and its syntax tree dropped, instead of every dependency's tree staying in memory until the first workspace finished loading. Measured on a 7-project workspace with BC 28.4 symbols (default `embedded` mode): the first project's build peak fell from about 1,120 MB to about 320 MB. Memory kept after start-up is unchanged.
+
 ## [1.18.5] - 2026-10-04
 
 ### Changed
