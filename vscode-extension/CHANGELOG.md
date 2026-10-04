@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.7] - 2026-10-04
+
+### Changed
+- **Bundles al-sem v1.3.5: much lower idle memory for the bundled al-call-hierarchy.** Each workspace project's background updater no longer keeps a large lookup table over every dependency routine, and the server no longer stores event links that have no subscriber (nothing used them). Measured on a 7-project workspace with BC 28.4 symbols (default `embedded` mode), with every project's updater idle: from about 764 MB to about 311 MB. Per project, the idle updater went from about 57 MB to about 5 MB. Results are unchanged.
+
 ## [1.18.6] - 2026-10-04
 
 ### Changed
