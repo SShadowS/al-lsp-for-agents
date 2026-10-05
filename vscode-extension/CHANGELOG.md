@@ -2,6 +2,17 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.8] - 2026-10-05
+
+### Changed
+- **Bundles al-sem v1.4.0.** The bundled al-call-hierarchy now builds against the current tree-sitter-al grammar. Several `#if` / `#else` layouts found in Business Central 29 code used to parse as errors, or were parsed and then partly dropped. They now parse, and the calls, global variables, table fields, keys and `case ... else` branches inside them are found.
+
+### Fixed
+- **A `.al` file that is not valid UTF-8 (for example saved as Windows-1252) no longer breaks the project.** Every part of the server now reads source files the same way: a leading byte-order mark is dropped and invalid bytes are replaced. In a file that starts with a byte-order mark, positions on the first line now match what the editor shows.
+- **The server and the analysis now see the same files.** A `.AL` extension in any case counts, `.alpackages`, `.snapshots` and `node_modules` are skipped in any case, and linked folders and files are followed.
+- **A full temp drive no longer silently drops a dependency.** When the temporary copy of a dependency's symbols cannot be written, the symbols are now read in memory instead, so calls into that dependency keep resolving.
+- **A property whose whole value sits in `#if`** (for example `TableNo = #if X Customer; #else Vendor; #endif`) no longer becomes a table with a made-up name.
+
 ## [1.18.7] - 2026-10-04
 
 ### Changed
