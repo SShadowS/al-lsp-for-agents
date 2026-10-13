@@ -2,6 +2,15 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.9] - 2026-10-13
+
+### Changed
+- **Bundles al-sem v1.6.0.** The bundled al-call-hierarchy now builds against tree-sitter-al `8682cb5f`. More `#if` layouts parse: a property value made of several `#if` groups, `#if` inside an `implements` list, a key's field list, a variable name list, and an event subscriber's attribute arguments. The names, fields and event subscriptions inside them are now found instead of dropped.
+- **Lower memory for the bundled al-call-hierarchy.** The server stores only the call graph facts it reads, and links to dependency events are shared by every workspace root instead of kept once per root.
+
+### Fixed
+- **A call no longer resolves to a trigger with the same name.** Call hierarchy and references could point a call to procedure `X` at a trigger also named `X`.
+
 ## [1.18.8] - 2026-10-05
 
 ### Changed
