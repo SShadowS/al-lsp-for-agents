@@ -70,9 +70,13 @@ LSP can be configured in two ways:
 | `settings` | Settings passed via workspace/didChangeConfiguration |
 | `workspaceFolder` | Workspace folder path for the server |
 | `startupTimeout` | Max time to wait for server startup (milliseconds) |
-| `shutdownTimeout` | Max time to wait for graceful shutdown (milliseconds) |
-| `restartOnCrash` | Whether to automatically restart the server if it crashes |
+| `shutdownTimeout` | Max time to wait for graceful shutdown (milliseconds); unset = no timeout |
+| `requestTimeout` | Max time to wait for a request's answer (milliseconds). Default 60000. Requires Claude Code 2.1.288+ |
+| `restartOnCrash` | Whether to automatically restart the server if it crashes. Default `true` |
 | `maxRestarts` | Maximum number of restart attempts before giving up |
+| `diagnostics` | Whether to push diagnostics into context after edits. Default `true` |
+
+The server config is a strict object: an unknown key fails validation and the plugin does not load. A field newer than the user's Claude Code (e.g. `requestTimeout` before 2.1.288) can therefore stop the plugin loading on older versions.
 
 ### Debug Logging
 
@@ -396,7 +400,7 @@ Check the `/plugin` Errors tab for this error and install the required binary fo
 
 ### Slow Server Startup
 1. Increase `startupTimeout` for servers like jdtls that take longer to initialize
-2. Default timeout is typically 5000ms (5 seconds)
+2. If the first request after startup fails after 60 seconds, raise `requestTimeout` (default 60000ms)
 
 ## Plugin Registration
 
