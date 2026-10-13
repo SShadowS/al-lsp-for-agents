@@ -1,8 +1,11 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   build-go:
@@ -54,6 +57,34 @@ jobs:
       - name: Compile
         working-directory: vscode-extension
         run: npm run compile
+
+  # Start the committed plugin binaries (what marketplace users get) and check
+  # both backends answer. The AL extension is downloaded from the Marketplace.
+  smoke-plugin:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            wrapper: al-language-server-go-windows/bin/al-lsp-wrapper.exe
+          - os: ubuntu-latest
+            wrapper: al-language-server-go-linux/bin/al-lsp-wrapper
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Smoke test
+        shell: bash
+        run: python test-al-project/smoke_lsp.py "$PWD/${{ matrix.wrapper }}" --launcher claude-code --auto-download-al-extension
 
   check-permissions:
     runs-on: ubuntu-latest
