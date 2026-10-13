@@ -1189,9 +1189,16 @@ func (w *ALLSPWrapper) SendNotificationToClient(method string, params interface{
 	}
 }
 
-// SendRequestToLSP sends a request to the AL LSP and waits for response (30s timeout)
+// defaultLSPRequestTimeout sits just under Claude Code's 60s LSP request
+// timeout (2.1.288+), so a slow request fails here with a named error
+// instead of a bare client timeout. 30s cut off cold requests on large
+// projects: a cold textDocument/references on the 8k-file Base Application
+// takes ~65s, a cold hover ~30s.
+const defaultLSPRequestTimeout = 55 * time.Second
+
+// SendRequestToLSP sends a request to the AL LSP and waits for response
 func (w *ALLSPWrapper) SendRequestToLSP(method string, params interface{}) (*Message, error) {
-	return w.SendRequestToLSPWithTimeout(method, params, 30*time.Second)
+	return w.SendRequestToLSPWithTimeout(method, params, defaultLSPRequestTimeout)
 }
 
 // SendRequestToLSPWithTimeout sends a request to the AL LSP with a custom timeout
