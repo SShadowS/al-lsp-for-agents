@@ -1260,12 +1260,6 @@ func (h *WorkspaceSymbolHandler) Handle(msg *Message, w WrapperInterface) (*Mess
 		}, nil
 	}
 
-	// Workaround: Claude Code sometimes sends file paths instead of symbol names
-	if strings.Contains(query, "/") || strings.Contains(query, "\\") {
-		query = ExtractSymbolFromPath(query)
-		w.Log("Extracted symbol from path: %s", query)
-	}
-
 	// No document to activate a project from. On a cold start nothing is
 	// active and al/symbolSearch returns [] in ~3 s; activate (and wait for)
 	// the workspace's project first.

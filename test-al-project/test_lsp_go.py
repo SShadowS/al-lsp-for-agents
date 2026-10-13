@@ -287,23 +287,26 @@ class LSPTester:
         return self.add_result("WorkspaceSymbol (empty)", False,
                                f"Expected [], got {result!r}", response)
 
-    def test_workspace_symbol_path_workaround(self) -> TestResult:
-        """Test workspace/symbol with file path as query (workaround test)."""
+    def test_workspace_symbol_slash_name(self) -> TestResult:
+        """A query with a slash is a symbol name, not a path: "G/L Account"
+        used to be cut to "L Account" by an old file-path heuristic."""
         _, response = self.request("workspace/symbol", {
-            "query": "C:/some/path/Customer.Table.al"
+            "query": "G/L Account"
         })
 
         if not response:
-            return self.add_result("WorkspaceSymbol (path)", False, "No response (timeout)")
+            return self.add_result("WorkspaceSymbol (slash)", False, "No response (timeout)")
 
         if "error" in response:
-            return self.add_result("WorkspaceSymbol (path)", False, f"Error: {response['error'].get('message', 'unknown')}")
+            return self.add_result("WorkspaceSymbol (slash)", False, f"Error: {response['error'].get('message', 'unknown')}")
 
-        if "result" in response:
-            # Should have extracted "Customer" from the path
-            return self.add_result("WorkspaceSymbol (path)", True, "Path workaround worked", response)
+        # The stripped query "L Account" also matches e.g. "Paypal Account Proxy".
+        names = [s.get("name", "") for s in response.get("result") or []]
+        stray = [n for n in names if "g/l" not in n.lower()]
+        if names and not stray:
+            return self.add_result("WorkspaceSymbol (slash)", True, f"All {len(names)} symbol(s) match G/L", response)
 
-        return self.add_result("WorkspaceSymbol (path)", False, "Unexpected response", response)
+        return self.add_result("WorkspaceSymbol (slash)", False, f"{len(names)} symbol(s), not G/L: {stray[:5]!r}", response)
 
     def test_references(self) -> TestResult:
         """Test textDocument/references."""
@@ -467,7 +470,7 @@ class LSPTester:
             self.test_document_symbol()
             self.test_workspace_symbol()
             self.test_workspace_symbol_empty_query()
-            self.test_workspace_symbol_path_workaround()
+            self.test_workspace_symbol_slash_name()
             self.test_references()
             self.test_call_hierarchy()
             self.test_code_lens()

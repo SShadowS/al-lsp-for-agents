@@ -340,29 +340,6 @@ func GetLogPattern() string {
 	return filepath.Join(GetLogDir(), "al-lsp-wrapper-go-*.log")
 }
 
-// ExtractSymbolFromPath extracts a symbol name from a file path
-// This is a workaround for Claude Code sending file paths instead of symbol names
-func ExtractSymbolFromPath(query string) string {
-	// Check if it looks like a file path
-	if strings.Contains(query, "/") || strings.Contains(query, "\\") {
-		// Extract filename without extension
-		base := filepath.Base(query)
-		ext := filepath.Ext(base)
-		name := strings.TrimSuffix(base, ext)
-
-		// Remove common prefixes/patterns
-		// e.g., "Tab18.Customer.dal" -> "Customer"
-		parts := strings.Split(name, ".")
-		if len(parts) > 1 {
-			// Return the last meaningful part
-			return parts[len(parts)-1]
-		}
-		return name
-	}
-
-	return query
-}
-
 // resolveALExtensionPathWithHome is the internal implementation for testing.
 // Priority: 1. explicit path, 2. AL_LSP_ALT_EXT_DIR env var, 3. AL_EXTENSION_PATH env var, 4. VS Code auto-discovery, 5. downloaded extension
 func resolveALExtensionPathWithHome(explicitPath, home string, autoDownload bool, channel string) (string, error) {
