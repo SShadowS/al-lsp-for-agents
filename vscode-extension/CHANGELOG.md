@@ -2,6 +2,15 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.10] - 2026-10-13
+
+### Changed
+- **The Claude Code plugin now needs Claude Code 2.1.288 or later.** It sets `requestTimeout` to 120 seconds, so a slow first request on a large project is no longer cut off at Claude Code's 60-second default. A cold find-references on the 8,000-file Base Application takes about 65 seconds. Older Claude Code versions don't know the field and refuse to load the plugin; run `claude update`.
+- **The wrapper waits up to 115 seconds for the AL Language Server instead of 30.** Cold hover and find-references on large projects used to fail with "timeout waiting for response" while the server was still loading.
+
+### Fixed
+- **Workspace symbol search for names with a slash, such as `G/L Account`, searches for the whole name.** A leftover file-path workaround cut the query to `L Account`, which returned unrelated symbols like `Paypal Account Proxy`.
+
 ## [1.18.9] - 2026-10-13
 
 ### Changed
