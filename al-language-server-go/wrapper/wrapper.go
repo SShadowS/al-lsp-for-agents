@@ -1189,12 +1189,12 @@ func (w *ALLSPWrapper) SendNotificationToClient(method string, params interface{
 	}
 }
 
-// defaultLSPRequestTimeout sits just under Claude Code's 60s LSP request
-// timeout (2.1.288+), so a slow request fails here with a named error
-// instead of a bare client timeout. 30s cut off cold requests on large
-// projects: a cold textDocument/references on the 8k-file Base Application
-// takes ~65s, a cold hover ~30s.
-const defaultLSPRequestTimeout = 55 * time.Second
+// defaultLSPRequestTimeout sits just under the plugin's requestTimeout
+// (120000 in .lsp.json, Claude Code 2.1.288+), so a slow request fails here
+// with a named error instead of a bare client timeout. Keep the two in step.
+// 30s cut off cold requests on large projects: a cold textDocument/references
+// on the 8k-file Base Application takes ~65s, a cold hover ~30s.
+const defaultLSPRequestTimeout = 115 * time.Second
 
 // SendRequestToLSP sends a request to the AL LSP and waits for response
 func (w *ALLSPWrapper) SendRequestToLSP(method string, params interface{}) (*Message, error) {

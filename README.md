@@ -50,6 +50,8 @@ The script downloads the latest binaries, checks for the AL VS Code extension, a
 
 ### Claude Code
 
+> **Requires Claude Code 2.1.288 or later** (`claude --version`, update with `claude update`). The plugin sets `requestTimeout` so a slow first request on a large project (a cold find-references on the Base Application takes about a minute) isn't cut off at Claude Code's 60-second default. Older versions don't know that field and refuse to load the plugin.
+
 #### 1. Enable LSP Tool
 
 ```powershell

@@ -9,6 +9,7 @@
     "transport": "stdio",
     "initializationOptions": {},
     "settings": {},
-    "maxRestarts": 3
+    "maxRestarts": 3,
+    "requestTimeout": 120000
   }
 }
