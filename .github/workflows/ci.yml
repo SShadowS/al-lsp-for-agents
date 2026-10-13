@@ -9,7 +9,11 @@ on:
 
 jobs:
   build-go:
-    runs-on: ubuntu-latest
+    # Windows: the path tests use Windows paths and only make sense there.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
