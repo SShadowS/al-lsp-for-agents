@@ -2,6 +2,11 @@
 
 All notable changes to AL LSP for Agents are documented here.
 
+## [1.18.11] - 2026-10-14
+
+### Changed
+- **Bundles al-sem v1.7.1.** Code navigation, call hierarchy and diagnostics are unchanged from 1.18.10. The Claude Code plugins also carry the signed `alsem` command-line tool, whose `digest` and `query` now load the workspace's dependencies by default (`--single-app` turns that off).
+
 ## [1.18.10] - 2026-10-13
 
 ### Changed
